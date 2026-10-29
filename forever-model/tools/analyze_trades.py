@@ -21,8 +21,14 @@ import sys
 
 import pandas as pd
 
-CATEGORICAL = ["side", "sw", "if", "smt", "dw", "ds", "q", "eq"]
+CATEGORICAL = ["side", "pk", "tf", "se", "cn", "sw", "if", "smt", "cf", "v", "q", "eq", "ds", "dw"]
 NUMERIC = ["rr", "pd", "fz", "rk", "ra", "tb", "dl", "ve"]
+# Klartext für Codes aus dem Pine-Tag
+NAMES = {
+    "pk": {1: "FVG", 2: "BAG", 3: "OB", 4: "Breaker", 5: "BPR", 6: "HTF-IFVG"},
+    "se": {1: "London", 2: "NY AM", 3: "NY PM"},
+    "ds": {0: "keine", 1: "HTF-Swing", 2: "PDH/PDL", 3: "Asia", 4: "London", 5: "Equal H/L"},
+}
 TAG_RE = re.compile(r"^([a-z]+)(-?\d+(?:\.\d+)?)$")
 
 
@@ -42,6 +48,7 @@ def load(path):
     c_sig = find_col(df, "signal")
     c_pnl = find_col(df, "net p&l", "profit", "p&l", exclude=("%", "cum"))
     c_time = find_col(df, "date", "time")
+    c_run = find_col(df, "run-up", exclude=("%",))
     if not all([c_trade, c_type, c_sig, c_pnl]):
         sys.exit(f"Spalten nicht erkannt. Gefunden: {list(df.columns)}")
 
@@ -54,15 +61,34 @@ def load(path):
         tag = parse_tag(str(entry[c_sig].iloc[0]))
         if tag is None:
             continue
-        tag["pnl"] = float(str(exit_[c_pnl].iloc[0]).replace(",", ""))
+        tag["sig"] = str(entry[c_sig].iloc[0])
+        tag["pnl"] = num(exit_[c_pnl].iloc[0])
+        tag["runup"] = num(exit_[c_run].iloc[0]) if c_run else float("nan")
         tag["time"] = pd.to_datetime(entry[c_time].iloc[0]) if c_time else None
         rows.append(tag)
     if not rows:
         sys.exit("Keine Trades mit Forever-Model-Tag gefunden.")
-    out = pd.DataFrame(rows).sort_values("time" if c_time else "pnl").reset_index(drop=True)
+    out = pd.DataFrame(rows)
+    # Teilausstiege erscheinen in TradingView als eigene Trades mit gleichem Entry → zu einer Position zusammenfassen
+    keys = ["time", "sig"] if c_time else ["sig"]
+    agg = {c: "first" for c in out.columns if c not in keys}
+    agg.update(pnl="sum", runup="max")
+    out = out.groupby(keys, as_index=False, sort=False).agg(agg)
+    out = out.sort_values("time" if c_time else "pnl").reset_index(drop=True)
+    for col, names in NAMES.items():
+        if col in out:
+            out[col] = out[col].map(lambda v, n=names: n.get(int(v), v) if pd.notna(v) else v)
     out["R"] = out["pnl"] / out["rd"].where(out["rd"] > 0)
+    out["runR"] = out["runup"] / out["rd"].where(out["rd"] > 0)
     out["win"] = out["pnl"] > 0
     return out
+
+
+def num(v):
+    try:
+        return float(str(v).replace(",", "").replace(" ", ""))
+    except ValueError:
+        return float("nan")
 
 
 def parse_tag(sig):
@@ -157,6 +183,13 @@ def main():
 
     print(f"\n=== Gesamt ({len(df)} Trades, IS {len(ins)} / OOS {len(oos)}) ===")
     print(fmt([{"faktor": "alle", **stats(df)}, {"faktor": "In-Sample", **stats(ins)}, {"faktor": "Out-of-Sample", **stats(oos)}]))
+
+    if df["runR"].notna().any():
+        print("\n=== Run-up (max. Buchgewinn bis zum Ausstieg, in R) ===")
+        print("  Hinweis: endet am TP, zeigt also nicht, wie weit der Kurs danach noch lief (dafür: Exit-Lab im Chart).")
+        for k in (1, 2, 3, 4):
+            print(f"  ≥ {k}R erreicht: {(df['runR'] >= k).mean():.0%}")
+        print(f"  Verlierer, die vorher ≥ 1R im Plus waren: {((df['R'] < 0) & (df['runR'] >= 1)).sum()} von {(df['R'] < 0).sum()}")
 
     print(f"\n=== Einzelfaktoren (alle Trades, n ≥ {a.min_n}) ===")
     single = []
