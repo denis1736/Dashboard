@@ -21,8 +21,8 @@ import sys
 
 import pandas as pd
 
-CATEGORICAL = ["side", "sw", "if", "smt", "dw"]
-NUMERIC = ["rr", "pd", "fz", "rk", "ra", "tb"]
+CATEGORICAL = ["side", "sw", "if", "smt", "dw", "ds"]
+NUMERIC = ["rr", "pd", "fz", "rk", "ra", "tb", "dl"]
 TAG_RE = re.compile(r"^([a-z]+)(-?\d+(?:\.\d+)?)$")
 
 

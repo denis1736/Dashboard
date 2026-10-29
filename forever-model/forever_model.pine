@@ -10,7 +10,8 @@
 //   5. optional IFVG: bärisches LTF-FVG des Abwärts-Legs wird überschlossen
 //   6. CISD: Close über dem Open der ersten Kerze der letzten bärischen Serie
 //   7. Entry: Limit am CISD-Level (Retest), SL unter dem Inducement-Tief
-//   8. TP: SD-Projektion des Legs (Default 2,5) – Fallback DOL, min. RR
+//   8. TP: SD-Projektion des Legs (Default 2,5) – Fallback: nächste unberührte
+//      Liquidität (HTF-Swing, PDH/PDL, Asia, London) mit RR ≥ Min
 //
 //  Jede Order trägt im Kommentar alle Setup-Merkmale (Feature-Tag) für die
 //  Auswertung mit tools/analyze_trades.py (Strategietester → Trade-Liste exportieren).
@@ -20,7 +21,7 @@ strategy("Forever Model – Werlein [v1]", shorttitle = "FM v1", overlay = true,
      default_qty_type = strategy.fixed, default_qty_value = 1,
      commission_type = strategy.commission.cash_per_contract, commission_value = 2.5,
      slippage = 1, pyramiding = 0,
-     backtest_fill_limits_assumption = 1, use_bar_magnifier = true,
+     backtest_fill_limits_assumption = 1, use_bar_magnifier = false,
      max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 2000)
 
 const string TZ = "America/New_York"
@@ -51,6 +52,14 @@ rangeSrc  = input.string("HTF-Swings", "Dealing Range", options = ["HTF-Swings",
 htfPiv    = input.int(3, "HTF-Swing-Länge", minval = 1, group = G2)
 usePD     = input.bool(true, "Premium/Discount-Filter", tooltip = "Long nur mit FVG unter EQ, Short nur über EQ.", group = G2)
 
+const string G2b = "2b · Draw on Liquidity"
+dolMode   = input.string("Hierarchie", "DOL-Quelle", options = ["Hierarchie", "Range-Extrem"],
+     tooltip = "Hierarchie: nächste unberührte Liquidität aus HTF-Swing, Vortages-H/L, Asia- und London-H/L. Range-Extrem: nur Dealing-Range-High/-Low.", group = G2b)
+asiaSess  = input.session("2000-0000", "Asia-Session (NY)", group = G2b)
+lonSess   = input.session("0200-0500", "London-Session (NY)", group = G2b)
+reqDol    = input.bool(false, "DOL mit RR ≥ Min erforderlich", tooltip = "Setup nur, wenn eine unberührte Liquidität mindestens Min-RR entfernt liegt.", group = G2b)
+showLiq   = input.bool(true, "Unberührte Liquidität anzeigen", group = G2b)
+
 const string G3 = "3 · Inducement, IFVG, CISD, SMT"
 ltfPiv    = input.int(3, "LTF-Swing-Länge", minval = 1, group = G3)
 reqSweep  = input.bool(true, "Inducement-Sweep erforderlich", group = G3)
@@ -67,13 +76,14 @@ const string EM_MARKET = "Market @ CISD-Close"
 entryMode = input.string(EM_LIMIT, "Entry", options = [EM_LIMIT, EM_MARKET], group = G4)
 entryExp  = input.int(15, "Limit-Gültigkeit (Bars)", minval = 1, group = G4)
 slBuf     = input.int(2, "SL-Puffer (Ticks)", minval = 0, group = G4)
-tpMode    = input.string("SD-Projektion", "Take-Profit", options = ["SD-Projektion", "Fixes R"], group = G4)
+tpMode    = input.string("SD-Projektion", "Take-Profit", options = ["SD-Projektion", "DOL", "Fixes R"],
+     tooltip = "DOL: nächste unberührte Liquidität mit RR ≥ Min.", group = G4)
 sdLeg     = input.string("Inducement-Leg", "SD-Anker", options = ["Inducement-Leg", "CISD-Leg"],
      tooltip = "TP = Extrem + SD × Leg-Range in Trade-Richtung. Inducement-Leg: Swing vor dem Sweep → Extrem. CISD-Leg: Extrem → höchster Punkt bis zum CISD.", group = G4)
 sdMult    = input.float(2.5, "SD-Multiplikator", minval = 0.5, step = 0.25, group = G4)
 fixR      = input.float(2.5, "Fixes R", minval = 0.5, step = 0.25, group = G4)
 minRR     = input.float(2.0, "Min. RR", minval = 0.5, step = 0.25, group = G4)
-dolFb     = input.bool(true, "DOL als TP-Fallback, wenn RR < Min", group = G4)
+dolFb     = input.bool(true, "DOL als TP-Fallback, wenn SD-RR < Min", group = G4)
 beR       = input.float(0.0, "Break-Even ab R (0 = aus)", minval = 0, step = 0.25, group = G4)
 
 const string G5 = "5 · Positionsgröße"
@@ -143,6 +153,74 @@ rngH  = rangeSrc == "HTF-Swings" ? swH : pdH
 rngL  = rangeSrc == "HTF-Swings" ? swL : pdL
 rngOk = not na(rngH) and not na(rngL) and rngH > rngL
 eq    = rngOk ? (rngH + rngL) / 2 : na
+
+// ───────────────────────────── Liquidität (DOL-Kandidaten) ─────────────────────────────
+// Session-High/-Low; "taken" sobald nach Session-Ende überschritten
+f_sessLiq(bool inSes) =>
+    var float runH = na
+    var float runL = na
+    var float lvH  = na
+    var float lvL  = na
+    var bool  tH   = false
+    var bool  tL   = false
+    if inSes and not inSes[1]
+        runH := high
+        runL := low
+    else if inSes
+        runH := math.max(runH, high)
+        runL := math.min(runL, low)
+    if not inSes and inSes[1]
+        lvH := runH
+        lvL := runL
+        tH  := false
+        tL  := false
+    else if not inSes
+        tH := tH or (not na(lvH) and high > lvH)
+        tL := tL or (not na(lvL) and low < lvL)
+    [lvH, lvL, tH, tL]
+
+[asH, asL, asHT, asLT] = f_sessLiq(inS(asiaSess))
+[loH, loL, loHT, loLT] = f_sessLiq(inS(lonSess))
+
+var float dHi = na
+var float dLo = na
+if timeframe.change("D")
+    dHi := high
+    dLo := low
+else
+    dHi := math.max(nz(dHi, high), high)
+    dLo := math.min(nz(dLo, low), low)
+pdHT = not na(pdH) and dHi > pdH
+pdLT = not na(pdL) and dLo < pdL
+
+var bool swHT = false
+var bool swLT = false
+if nz(swH) != nz(swH[1])
+    swHT := false
+if nz(swL) != nz(swL[1])
+    swLT := false
+swHT := swHT or (not na(swH) and high > swH)
+swLT := swLT or (not na(swL) and low < swL)
+
+var array<string> DOL_NAMES = array.from("—", "HTF-Swing", "PDH/PDL", "Asia", "London")
+
+// Nächste unberührte Liquidität in Richtung d, mindestens minDist vom Referenzpreis entfernt → [Level, Quelle 1–4]
+f_dol(int d, float ref, float minDist) =>
+    float best = na
+    int   src  = 0
+    if dolMode == "Range-Extrem"
+        float lv = d == 1 ? rngH : rngL
+        if rngOk and d * (lv - ref) > minDist
+            best := lv
+            src  := 1
+    else
+        for i = 0 to 3
+            float lv = i == 0 ? (d == 1 ? swH : swL) : i == 1 ? (d == 1 ? pdH : pdL) : i == 2 ? (d == 1 ? asH : asL) : (d == 1 ? loH : loL)
+            bool  tk = i == 0 ? (d == 1 ? swHT : swLT) : i == 1 ? (d == 1 ? pdHT : pdLT) : i == 2 ? (d == 1 ? asHT : asLT) : (d == 1 ? loHT : loLT)
+            if not na(lv) and not tk and d * (lv - ref) > minDist and (na(best) or d * (lv - best) < 0)
+                best := lv
+                src  := i + 1
+    [best, src]
 
 // ───────────────────────────── HTF-FVGs ─────────────────────────────
 type HFvg
@@ -263,11 +341,12 @@ cmpLoRef = ta.lowest(cmpL, smtLen)[1]
 cmpHiRef = ta.highest(cmpH, smtLen)[1]
 
 // ───────────────────────────── Hilfsfunktionen ─────────────────────────────
-f_tag(int d, bool sw, bool ifv, bool smt, float rr, float pd, float fz, float rk, float rd, float ra, int tb) =>
+f_tag(int d, bool sw, bool ifv, bool smt, float rr, float pd, float fz, float rk, float rd, float ra, int tb, float dl, int ds) =>
     (d == 1 ? "L" : "S") + "|sw" + (sw ? "1" : "0") + "|if" + (ifv ? "1" : "0") + "|smt" + (smt ? "1" : "0") +
      "|t" + str.format("{0,number,00}{1,number,00}", hour(time, TZ), minute(time, TZ)) + "|dw" + str.tostring(dayofweek(time, TZ)) +
      "|rr" + str.tostring(rr, "#.##") + "|pd" + str.tostring(pd, "#.##") + "|fz" + str.tostring(fz, "#") +
-     "|rk" + str.tostring(rk, "#") + "|rd" + str.tostring(rd, "#") + "|ra" + str.tostring(ra, "#.##") + "|tb" + str.tostring(tb)
+     "|rk" + str.tostring(rk, "#") + "|rd" + str.tostring(rd, "#") + "|ra" + str.tostring(ra, "#.##") + "|tb" + str.tostring(tb) +
+     "|dl" + str.tostring(dl, "#.##") + "|ds" + str.tostring(ds)
 
 // JSON für spätere Webhook-Automatisierung ({{strategy.order.alert_message}})
 f_json(string act, int d, int qty, float e, float sl, float tp) =>
@@ -387,12 +466,16 @@ if st == 1 and bar_index > sTapBar
         float stop  = math.round_to_mintick(sExt - d * slBuf * tick)
         float risk  = d * (entry - stop)
         float legR  = sdLeg == "Inducement-Leg" ? math.abs(sLegFar - sExt) : math.abs(sAway - sExt)
-        float tp    = math.round_to_mintick(tpMode == "SD-Projektion" ? sExt + d * sdMult * legR : entry + d * fixR * risk)
+        [dolNear, dolNearSrc] = f_dol(d, entry, 0.0)
+        [dolTp, dolTpSrc]     = f_dol(d, entry, math.max(risk, 0.0) * minRR)
+        float dlRR  = risk > 0 and not na(dolNear) ? d * (dolNear - entry) / risk : -1.0
+        float tp    = math.round_to_mintick(tpMode == "SD-Projektion" ? sExt + d * sdMult * legR : tpMode == "DOL" ? nz(dolTp, entry) : entry + d * fixR * risk)
         float rr    = risk > 0 ? d * (tp - entry) / risk : 0.0
-        float dol   = d == 1 ? rngH : rngL
-        if rr < minRR and dolFb and rngOk and risk > 0 and d * (dol - entry) / risk >= minRR
-            tp := math.round_to_mintick(dol)
-            rr := d * (tp - entry) / risk
+        int   tpSrc = tpMode == "DOL" ? dolTpSrc : 0
+        if tpMode == "SD-Projektion" and rr < minRR and dolFb and risk > 0 and not na(dolTp)
+            tp    := math.round_to_mintick(dolTp)
+            rr    := d * (tp - entry) / risk
+            tpSrc := dolTpSrc
         int qty = sizeMode == "Fixe Kontrakte" ? fixQty : (risk > 0 ? math.floor(strategy.equity * riskPct / 100 / (risk * syminfo.pointvalue)) : 0)
         qty := math.min(qty, maxQty)
 
@@ -403,6 +486,8 @@ if st == 1 and bar_index > sTapBar
             fails += " IFVG"
         if useSmt and reqSmt and not sSmt
             fails += " SMT"
+        if reqDol and na(dolTp)
+            fails += " DOL"
         if risk <= 0
             fails += " Risk≤0"
         if rr < minRR
@@ -426,7 +511,7 @@ if st == 1 and bar_index > sTapBar
         if fails == ""
             float pdPos = rngOk ? ((sF.top + sF.bot) / 2 - rngL) / (rngH - rngL) : -1.0
             string tag = f_tag(d, sSwept, sIfvg, sSmt, rr, pdPos, (sF.top - sF.bot) / tick, risk / tick,
-                 risk * syminfo.pointvalue * qty, atr > 0 ? risk / atr : 0.0, bar_index - sTapBar)
+                 risk * syminfo.pointvalue * qty, atr > 0 ? risk / atr : 0.0, bar_index - sTapBar, dlRR, dolNearSrc)
             sEntry := entry
             sStop  := stop
             sTp    := tp
@@ -446,7 +531,11 @@ if st == 1 and bar_index > sTapBar
             if showSetup
                 dRisk := box.new(bar_index, entry, bar_index + 1, stop, bgcolor = color.new(color.red, 82), border_color = color.new(color.red, 50))
                 dRew  := box.new(bar_index, tp, bar_index + 1, entry, bgcolor = color.new(color.green, 82), border_color = color.new(color.green, 50),
-                     text = "RR " + str.tostring(rr, "#.##"), text_size = size.tiny, text_color = color.green, text_halign = text.align_right)
+                     text = "RR " + str.tostring(rr, "#.##") + (tpSrc > 0 ? " · TP " + DOL_NAMES.get(tpSrc) : ""), text_size = size.tiny, text_color = color.green, text_halign = text.align_right)
+                if not na(dolNear)
+                    line.new(bar_index, dolNear, bar_index + 15, dolNear, color = color.new(color.lime, 0), width = 2)
+                    label.new(bar_index + 15, dolNear, "DOL " + DOL_NAMES.get(dolNearSrc), style = label.style_label_left,
+                         color = color.new(color.lime, 100), textcolor = color.lime, size = size.tiny)
             if showSD and legR > 0
                 for k in array.from(1.0, 2.0, 2.5)
                     float lv = sExt + d * k * legR
@@ -502,6 +591,12 @@ pL  = plot(showRange and rngOk ? rngL : na, "Range Low (DOL Short)", color.new(c
 fill(pH, pEq, color.new(color.red, 96), "Premium")
 fill(pEq, pL, color.new(color.green, 96), "Discount")
 bgcolor(showSess and inEntry ? color.new(color.blue, 94) : na, title = "Entry-Fenster")
+plot(showLiq and not pdHT ? pdH : na, "PDH (unberührt)", color.new(color.orange, 20), 1, plot.style_linebr)
+plot(showLiq and not pdLT ? pdL : na, "PDL (unberührt)", color.new(color.orange, 20), 1, plot.style_linebr)
+plot(showLiq and not asHT ? asH : na, "Asia High (unberührt)", color.new(color.purple, 20), 1, plot.style_linebr)
+plot(showLiq and not asLT ? asL : na, "Asia Low (unberührt)", color.new(color.purple, 20), 1, plot.style_linebr)
+plot(showLiq and not loHT ? loH : na, "London High (unberührt)", color.new(color.blue, 20), 1, plot.style_linebr)
+plot(showLiq and not loLT ? loL : na, "London Low (unberührt)", color.new(color.blue, 20), 1, plot.style_linebr)
 
 // ───────────────────────────── Status-Tabelle ─────────────────────────────
 var table tb = table.new(position.top_right, 2, 9, bgcolor = color.new(color.black, 25), border_width = 1, border_color = color.new(color.gray, 70))

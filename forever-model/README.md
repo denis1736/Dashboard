@@ -11,20 +11,20 @@ Grundlage sind öffentliche Zusammenfassungen des Modells (Werlein-PDF „Backte
 
 | # | Original (sinngemäß) | Umsetzung im Script |
 |---|---|---|
-| 1 | Klare Draw on Liquidity (DOL) | Dealing Range = letztes 1H-Swing-High/-Low (oder Vortages-H/L). DOL Long = Range-High, DOL Short = Range-Low ⚠ |
+| 1 | Klare Draw on Liquidity (DOL) | Dealing Range = letztes 1H-Swing-High/-Low (oder Vortages-H/L) für Premium/Discount. Als DOL zählt die **nächste unberührte Liquidität** aus HTF-Swing, PDH/PDL, Asia-H/L (20–24 Uhr NY) und London-H/L (02–05 Uhr NY). Optional ist eine DOL mit RR ≥ Min Pflicht |
 | 2 | 1H-FVG passend zu Premium/Discount | 3-Kerzen-FVG auf dem HTF (nur geschlossene Bars, kein Repainting). Long nur, wenn die FVG-Mitte unter dem EQ (50 %) liegt, Short nur darüber |
 | 3 | Pullback ins 1H-FVG nach Inducement | Tap = LTF-Kerze handelt im FVG. Inducement = Extrem im FVG nimmt ein LTF-Swing-Tief/-Hoch (Pivot, Länge 3) ⚠ |
 | 4 | Inverse FVG (IFVG) | Ein LTF-FVG des Gegen-Legs wird per Close überschritten. Optional als Pflichtfilter |
 | 5 | CISD | Close über dem Open der ersten Kerze der letzten bärischen Serie ins Tief (Long), spiegelbildlich für Short |
 | 6 | Entry auf Retest des CISD | Limit-Order am CISD-Level, gültig für N Bars. Alternativ Market beim CISD-Close |
 | 7 | SL am letzten Hoch/Tief | Inducement-Extrem ± Puffer in Ticks |
-| 8 | TP 2–2,5 SD des Inducement-Legs, sonst nächste Liquidität, mindestens 2R | `TP = Extrem + SD × Leg-Range` in Trade-Richtung. Fallback: DOL. Bleibt das RR unter dem Minimum, wird das Setup verworfen ⚠ (Anker und Zählweise der SD sind in den Quellen nicht eindeutig) |
+| 8 | TP 2–2,5 SD des Inducement-Legs, sonst nächste Liquidität, mindestens 2R | `TP = Extrem + SD × Leg-Range` in Trade-Richtung. Fallback: die nächste unberührte DOL mit RR ≥ Min. Ohne beides wird das Setup verworfen. Alternativ TP direkt auf die DOL. ⚠ Der SD-Anker ist offen: Beide Varianten (Inducement-Leg, CISD-Leg) sind wählbar, die Daten entscheiden |
 | 9 | SMT (NQ/ES) | Optional: Eigenes Symbol unterschreitet das Referenztief, das Vergleichssymbol nicht |
 | 10 | NY-AM-Session, keine Red-Folder-News | Entry-Fenster 09:30–11:00 NY. Zwei frei setzbare News-Sperrfenster |
 
-**Visualisierung im Chart:** HTF-FVGs (aktiv in Farbe, invalidiert in Grau), Dealing Range mit EQ und Premium/Discount-Schattierung, Entry-Fenster, Tap, Inducement inkl. Sweep, IFVG, CISD-Linie, SMT-Marke, Entry/SL/TP-Boxen mit RR, SD-Level 1/2/2,5, verworfene Setups mit Grund und eine Status-Tabelle.
+**Visualisierung im Chart:** unberührte Liquidität (PDH/PDL, Asia, London), DOL-Ziel je Setup, HTF-FVGs (aktiv in Farbe, invalidiert in Grau), Dealing Range mit EQ und Premium/Discount-Schattierung, Entry-Fenster, Tap, Inducement inkl. Sweep, IFVG, CISD-Linie, SMT-Marke, Entry/SL/TP-Boxen mit RR, SD-Level 1/2/2,5, verworfene Setups mit Grund und eine Status-Tabelle.
 
-**Backtest-Realismus:** Limit-Fills erst, wenn der Preis 1 Tick durch das Limit läuft. Bar Magnifier ist aktiv (Premium-Plan nötig). Gerechnet wird mit 2,50 $ Kommission pro Kontrakt und Seite und 1 Tick Slippage.
+**Backtest-Realismus:** Limit-Fills erst, wenn der Preis 1 Tick durch das Limit läuft. Gerechnet wird mit 2,50 $ Kommission pro Kontrakt und Seite und 1 Tick Slippage. Der Bar Magnifier ist aus, weil er im Plus-Plan nicht verfügbar ist. Erreichen Stop und Ziel in derselben Kerze, ist das Ergebnis deshalb unscharf.
 
 ## 2. Ehrliche Einordnung
 
@@ -34,17 +34,30 @@ Grundlage sind öffentliche Zusammenfassungen des Modells (Werlein-PDF „Backte
 
 ## 3. Ablaufplan
 
+**Rahmenbedingungen:** Der TradingView-Plus-Plan lädt nur rund 10.000 Bars. Das sind auf 5m etwa 6–7 Wochen, auf 1m wenige Tage, also zu wenige Trades für eine Aussage. TradingView dient deshalb der **visuellen Verifikation und der Live-Signalerzeugung**. Der statistische Backtest über mehrere Jahre läuft in **Python**.
+
 | Phase | Inhalt | Tools (Kosten) | Abnahmekriterium |
 |---|---|---|---|
-| **0 · Regeln festnageln** | ⚠-Punkte klären, ggf. Werlein-Material gegenlesen | – | Regelwerk ohne Interpretationsspielraum |
-| **1 · Visuelle Verifikation** | Script auf NQ/MNQ 1m/3m/5m laden, im Bar Replay 30+ Setups mit eigener Lesart vergleichen | TradingView (vorhanden) | ≥ 90 % Übereinstimmung mit deinem manuellen Urteil |
-| **2 · Basis-Backtest** | Alle Filter aus, möglichst lange Historie (Deep Backtesting), Trade-Liste exportieren | TradingView Premium | ≥ 300 Trades, Rohergebnis dokumentiert |
-| **3 · Faktor-Analyse** | `analyze_trades.py`: Einzelfaktoren, 2er-Kombinationen, IS/OOS-Prüfung | Python + pandas (kostenlos) | Faktoren mit OOS-avgR > 0 und n ≥ 30 |
-| **4 · Robustheit** | Parameter-Heatmaps (SD, minRR, Fenster), Walk-Forward, Monte-Carlo-Drawdown, Kostenstress (2× Slippage) | Python (kostenlos). Daten: TV-Chart-Export oder Python-Replik | Profitabel in ≥ 70 % der Nachbar-Parameter und in jedem WF-Fenster |
-| **5 · Python-Replik** (optional, empfohlen) | Strategie 1:1 in Python für echte Grid-Searches über Jahre | Python, vectorbt/backtesting.py (kostenlos). Daten: TV-Export (kostenlos) oder Databento (ca. 1–2 $/Monat NQ-1m) | Abweichung zu TV < 5 % der Trades |
-| **6 · Paper-Forward-Test** | TV-Alerts (`{{strategy.order.alert_message}}`) → Webhook → Broker-Paper-Konto, 2–3 Monate | TV-Webhooks (vorhanden), eigener Webhook-Server (Oracle Cloud Free Tier, kostenlos) | Live-Kennzahlen innerhalb der Backtest-Bandbreite |
-| **7 · Live mit Mindestgröße** | 1 MNQ, harte Kill-Switches (Tagesverlust, Max-Trades, Verbindungsabbruch) | Broker-API (z. B. IBKR kostenlos, Tradovate) | 100 Live-Trades ohne Ausführungsfehler |
-| **8 · Skalieren & Monitoring** | Logging, Telegram-Benachrichtigung, monatliches Re-Review statt Dauer-Optimierung | Telegram-Bot (kostenlos) | – |
+| **0 · Regeln festnageln** | Offene ⚠-Punkte klären | – | Regelwerk ohne Interpretationsspielraum |
+| **1 · Visuelle Verifikation** | Script auf MNQ/NQ 1m/3m/5m, im Bar Replay 30+ Setups mit eigener Lesart vergleichen, Regeln nachschärfen | TradingView Plus (vorhanden) | ≥ 90 % Übereinstimmung mit deinem manuellen Urteil |
+| **2 · Daten beschaffen** | NQ + ES 1m-OHLCV, 2019 bis heute | Databento (ca. 125 $ Startguthaben, deckt das voraussichtlich ab) oder FirstRateData (einmalig ca. 100 $) | Datensatz ohne Lücken, Roll-adjustiert |
+| **3 · Python-Replik** | Strategie 1:1 nachbauen. Abgleich gegen TV auf den Wochen, die TV laden kann | Python, pandas, numba (kostenlos) | ≥ 95 % identische Trades zum TV-Script |
+| **4 · Basis-Backtest + Faktor-Analyse** | Alle Filter aus, jahrelange Historie. Danach Einzelfaktoren und 2er-Kombinationen, IS/OOS (`analyze_trades.py` liest dasselbe Tag-Format) | Python (kostenlos) | Faktoren mit OOS-avgR > 0 und n ≥ 30 |
+| **5 · Robustheit** | Parameter-Heatmaps, Walk-Forward (z. B. 2 Jahre IS / 6 Monate OOS, rollierend), Monte-Carlo-Drawdown, Kostenstress | Python (kostenlos) | Profitabel in ≥ 70 % der Nachbar-Parameter und in jedem WF-Fenster. MC-Drawdown (95 %) < Prop-Limit |
+| **6 · Prop-Regeln simulieren** | Trailing Drawdown, Daily Loss Limit, Konsistenzregel der gewählten Firma auf die Equity-Kurve legen | Python (kostenlos) | Bestehensquote der Evaluation in der Monte-Carlo-Simulation |
+| **7 · Forward-Test** | TV-Alert (`{{strategy.order.alert_message}}`) → Webhook → Tradovate-Demo, 2–3 Monate | TV-Webhooks (Plus ✓). Bridge: TradersPost / PickMyTrade (kostenpflichtig) oder eigener Server | Live-Kennzahlen innerhalb der Backtest-Bandbreite |
+| **8 · Evaluation / Live** | 1 MNQ, Kill-Switches (Tagesverlust, Max-Trades, Verbindungsverlust), Telegram-Logging | – | 100 Trades ohne Ausführungsfehler |
+
+**Prop-Firma und Automatisierung (Stand der Quellen Okt. 2026, vor dem Kauf beim Anbieter prüfen):**
+
+| Anbieter | Automatisierung |
+|---|---|
+| Apex | Laut aktuellen Quellen auf allen Konten verboten. Für den Bot ungeeignet |
+| Topstep | Bots in Combine und Express Funded erlaubt, im Live Funded nicht. Kein VPS bzw. Remote-Server, der Bot muss auf deinem eigenen Rechner laufen |
+| Lucid | Laut Update vom September 2026 erlaubt. HFT und Mikro-Scalping (≤ 5 s) verboten |
+| Tradeify | Erlaubt, wenn du alleiniger Eigentümer der Strategie bist |
+
+Folge für die Architektur: Der Ausführungs-Server sollte **lokal auf deinem PC** laufen können, nicht nur in der Cloud. Ich plane ihn so, dass beides geht.
 
 ## 4. Bedienung
 
@@ -56,7 +69,9 @@ Grundlage sind öffentliche Zusammenfassungen des Modells (Werlein-PDF „Backte
 2. `pip install pandas openpyxl`
 3. `python tools/analyze_trades.py trades.csv --min-n 20 --is 0.6`
 
-Für den Basis-Backtest alle Pflichtfilter deaktivieren (Sweep, IFVG, SMT). So werden alle Setups gehandelt, und die Analyse zeigt anhand der Tags, welche Filter wirklich helfen. Beispiel-Tag: `L|sw1|if0|smt1|t0948|dw3|rr2.6|pd0.31|fz24|rk58|rd290|ra1.2|tb7`
+Mit dem Plus-Plan reicht das nur für einen Funktionstest. Aussagekräftig wird die Analyse ab Phase 4.
+
+Für den Basis-Backtest alle Pflichtfilter deaktivieren (Sweep, IFVG, SMT, DOL). So werden alle Setups gehandelt, und die Analyse zeigt anhand der Tags, welche Filter wirklich helfen. Beispiel-Tag: `L|sw1|if0|smt1|t0948|dw3|rr2.6|pd0.31|fz24|rk58|rd290|ra1.2|tb7`
 
 | Tag | Bedeutung |
 |---|---|
@@ -69,3 +84,5 @@ Für den Basis-Backtest alle Pflichtfilter deaktivieren (Sweep, IFVG, SMT). So w
 | `rk` / `rd` | Risiko in Ticks / in $ |
 | `ra` | Risiko / ATR(14) |
 | `tb` | Bars vom Tap bis zum CISD |
+| `dl` | RR bis zur nächsten unberührten DOL (−1 = keine) |
+| `ds` | DOL-Quelle: 1 HTF-Swing, 2 PDH/PDL, 3 Asia, 4 London |
