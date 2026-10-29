@@ -7,22 +7,27 @@
 
 ## 1. Das Regelwerk und wie es mechanisiert ist
 
-Grundlage sind öffentliche Zusammenfassungen des Modells (Werlein-PDF „Backtesting Reimagined“ und Video-Zusammenfassungen). **Die Originalquellen konnten nicht vollständig gelesen werden.** Die mit ⚠ markierten Punkte sind meine Interpretation und müssen bestätigt werden.
+Quelle ist das Werlein-PDF „Justin Werlein's Forever Model“ (FX Replay). ⚠ markiert die Stellen, an denen das PDF Interpretationsspielraum lässt.
 
-| # | Original (sinngemäß) | Umsetzung im Script |
+| # | Regel laut PDF | Umsetzung im Script |
 |---|---|---|
-| 1 | Klare Draw on Liquidity (DOL) | Dealing Range = letztes 1H-Swing-High/-Low (oder Vortages-H/L) für Premium/Discount. Als DOL zählt die **nächste unberührte Liquidität** aus HTF-Swing, PDH/PDL, Asia-H/L (20–24 Uhr NY) und London-H/L (02–05 Uhr NY). Optional ist eine DOL mit RR ≥ Min Pflicht |
-| 2 | 1H-FVG passend zu Premium/Discount | 3-Kerzen-FVG auf dem HTF (nur geschlossene Bars, kein Repainting). Long nur, wenn die FVG-Mitte unter dem EQ (50 %) liegt, Short nur darüber |
-| 3 | Pullback ins 1H-FVG nach Inducement | Tap = LTF-Kerze handelt im FVG. Inducement = Extrem im FVG nimmt ein LTF-Swing-Tief/-Hoch (Pivot, Länge 3) ⚠ |
-| 4 | Inverse FVG (IFVG) | Ein LTF-FVG des Gegen-Legs wird per Close überschritten. Optional als Pflichtfilter |
-| 5 | CISD | Close über dem Open der ersten Kerze der letzten bärischen Serie ins Tief (Long), spiegelbildlich für Short |
-| 6 | Entry auf Retest des CISD | Limit-Order am CISD-Level, gültig für N Bars. Alternativ Market beim CISD-Close |
-| 7 | SL am letzten Hoch/Tief | Inducement-Extrem ± Puffer in Ticks |
-| 8 | TP 2–2,5 SD des Inducement-Legs, sonst nächste Liquidität, mindestens 2R | `TP = Extrem + SD × Leg-Range` in Trade-Richtung. Fallback: die nächste unberührte DOL mit RR ≥ Min. Ohne beides wird das Setup verworfen. Alternativ TP direkt auf die DOL. ⚠ Der SD-Anker ist offen: Beide Varianten (Inducement-Leg, CISD-Leg) sind wählbar, die Daten entscheiden |
-| 9 | SMT (NQ/ES) | Optional: Eigenes Symbol unterschreitet das Referenztief, das Vergleichssymbol nicht |
-| 10 | NY-AM-Session, keine Red-Folder-News | Entry-Fenster 09:30–11:00 NY. Zwei frei setzbare News-Sperrfenster |
+| 1 | NY-Session, Execution auf 1/3/5m, HTF 1H, NQ/ES, idealerweise NY AM | Entry-Fenster 09:30–11:00 NY (einstellbar), HTF = 60 |
+| 2 | Zuerst eine **klare DOL** identifizieren. Rangfolge: relative Equal H/L > Trendlinien-Liquidität > Buy-/Sellside (interne H/L, Session-H/L) | DOL = nächste unberührte Liquidität aus **Equal H/L** (zwei Swings innerhalb 0,15 × ATR), HTF-Swing, PDH/PDL, Asia, London. ⚠ Trendlinien-Liquidität ist nicht umgesetzt, weil sie kaum objektiv zu fassen ist |
+| 3 | 1H-FVG passend zu Premium/Discount, DOL liegt vom FVG weg | 3-Kerzen-FVG auf geschlossenen 1H-Bars. Long nur im Discount, Short nur im Premium der Dealing Range ⚠ (Wahl der Range) |
+| 4 | **Inducement**: LTF-Liquidity-Sweep in den HTF-POI | Das Extrem im FVG nimmt ein LTF-Swing-Tief/-Hoch |
+| 5 | **IFVG**: FVG, durch das der Preis zurückschließt | Ein LTF-FVG des Legs ins FVG wird per Close überschritten |
+| 6 | **CISD**: Close jenseits des Bodys des letzten Price-Legs | Close über dem Open der ersten Kerze der letzten Gegenserie |
+| 7 | Entry: **Limit auf den CISD-Retest**. Alternativ: Retest des IFVG | Limit am CISD-Level (Default) oder an der IFVG-Kante |
+| 8 | SL am letzten Hoch/Tief | Extrem ± Puffer |
+| 9 | TP: 2–2,5 SD-Projektion des **Inducement-Legs**. Bringt das keine 2R, nächste interne H/L oder Liquidität | `TP = Extrem + SD × Leg-Range`, Fallback nächste DOL mit RR ≥ 2. ⚠ Wie die SD gezählt wird, sagt das PDF nicht. Der Multiplikator wird deshalb optimiert |
+| 10 | Kein Trade unter 2R, keiner direkt vor Red-Folder-News | Min-RR 2. News-Sperrfenster, manuell zu setzen |
+| 11 | Optional **SMT** mit ES (Wick-H/L; Body-Vergleich = „Hidden SMT“) | Wick-SMT am Extrem. ⚠ Hidden SMT ist noch nicht umgesetzt |
+| 12 | Bonus: **V-Shape**, also schnelle IFVG-Inversion plus CISD | V-Shape = IFVG und CISD höchstens 5 Bars nach dem Extrem |
+| 13 | Trade-Management: keines. Bei gegenläufigem SMT ggf. teilschließen | Kein Management (Break-Even optional). ⚠ SMT-Exit ist für v3 geplant |
+| 14 | „Fehlt ein Parameter, sinkt die Qualität, nur A+ Setups“ | **Qualitäts-Score 0–6**: PD, Sweep, IFVG, SMT, V-Shape, Equal-H/L-DOL. Ein Mindestscore ist einstellbar |
+| 15 | Optional weitere 1H-POIs (Order Blocks, Breaker, im Beispiel ein BPR) | ⚠ Nicht umgesetzt (Backlog v3) |
 
-**Visualisierung im Chart:** unberührte Liquidität (PDH/PDL, Asia, London), DOL-Ziel je Setup, HTF-FVGs (aktiv in Farbe, invalidiert in Grau), Dealing Range mit EQ und Premium/Discount-Schattierung, Entry-Fenster, Tap, Inducement inkl. Sweep, IFVG, CISD-Linie, SMT-Marke, Entry/SL/TP-Boxen mit RR, SD-Level 1/2/2,5, verworfene Setups mit Grund und eine Status-Tabelle.
+**Visualisierung im Chart:** Equal H/L (gelb), unberührte Liquidität (PDH/PDL, Asia, London), DOL-Ziel je Setup, HTF-FVGs (aktiv in Farbe, invalidiert in Grau), Dealing Range mit EQ und Premium/Discount-Schattierung, Entry-Fenster, Tap, Inducement inkl. Sweep, IFVG, CISD-Linie, SMT-Marke, Entry/SL/TP-Boxen mit RR, Score und V-Shape, SD-Level 1/2/2,5, verworfene Setups mit Grund und eine Status-Tabelle.
 
 **Backtest-Realismus:** Limit-Fills erst, wenn der Preis 1 Tick durch das Limit läuft. Gerechnet wird mit 2,50 $ Kommission pro Kontrakt und Seite und 1 Tick Slippage. Der Bar Magnifier ist aus, weil er im Plus-Plan nicht verfügbar ist. Erreichen Stop und Ziel in derselben Kerze, ist das Ergebnis deshalb unscharf.
 
@@ -38,7 +43,7 @@ Grundlage sind öffentliche Zusammenfassungen des Modells (Werlein-PDF „Backte
 
 | Phase | Inhalt | Tools (Kosten) | Abnahmekriterium |
 |---|---|---|---|
-| **0 · Regeln festnageln** | Offene ⚠-Punkte klären | – | Regelwerk ohne Interpretationsspielraum |
+| **0 · Regeln festnageln** | Offene ⚠-Punkte klären (Werlein-PDF ist eingearbeitet) | – | Regelwerk ohne Interpretationsspielraum |
 | **1 · Visuelle Verifikation** | Script auf MNQ/NQ 1m/3m/5m, im Bar Replay 30+ Setups mit eigener Lesart vergleichen, Regeln nachschärfen | TradingView Plus (vorhanden) | ≥ 90 % Übereinstimmung mit deinem manuellen Urteil |
 | **2 · Daten beschaffen** | NQ + ES 1m-OHLCV, 2019 bis heute | Databento (ca. 125 $ Startguthaben, deckt das voraussichtlich ab) oder FirstRateData (einmalig ca. 100 $) | Datensatz ohne Lücken, Roll-adjustiert |
 | **3 · Python-Replik** | Strategie 1:1 nachbauen. Abgleich gegen TV auf den Wochen, die TV laden kann | Python, pandas, numba (kostenlos) | ≥ 95 % identische Trades zum TV-Script |
@@ -85,4 +90,7 @@ Für den Basis-Backtest alle Pflichtfilter deaktivieren (Sweep, IFVG, SMT, DOL).
 | `ra` | Risiko / ATR(14) |
 | `tb` | Bars vom Tap bis zum CISD |
 | `dl` | RR bis zur nächsten unberührten DOL (−1 = keine) |
-| `ds` | DOL-Quelle: 1 HTF-Swing, 2 PDH/PDL, 3 Asia, 4 London |
+| `ds` | DOL-Quelle: 1 HTF-Swing, 2 PDH/PDL, 3 Asia, 4 London, 5 Equal H/L |
+| `q` | Qualitäts-Score 0–6 |
+| `ve` | Bars vom Extrem bis zum CISD (V-Shape-Tempo) |
+| `eq` | Unberührte Equal H/L in Trade-Richtung vorhanden (1/0) |

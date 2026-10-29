@@ -3,6 +3,7 @@
 //  Forever Model (Justin Werlein) – mechanisierte Interpretation · v1
 //
 //  Ablauf je Setup (Long; Short spiegelbildlich):
+//   (Regeln laut Werlein-PDF "Forever Model" / FX Replay)
 //   1. Dealing Range (HTF-Swings oder Vortag) → EQ 50 % → Premium/Discount
 //   2. Bullisches HTF-FVG (Default 1H) im Discount, Draw on Liquidity = Range-High
 //   3. Tap: LTF-Preis läuft in das HTF-FVG
@@ -11,7 +12,8 @@
 //   6. CISD: Close über dem Open der ersten Kerze der letzten bärischen Serie
 //   7. Entry: Limit am CISD-Level (Retest), SL unter dem Inducement-Tief
 //   8. TP: SD-Projektion des Legs (Default 2,5) – Fallback: nächste unberührte
-//      Liquidität (HTF-Swing, PDH/PDL, Asia, London) mit RR ≥ Min
+//      Liquidität (Equal H/L, HTF-Swing, PDH/PDL, Asia, London) mit RR ≥ Min
+//   9. Qualitäts-Score 0–6 (PD, Sweep, IFVG, SMT, V-Shape, EQ-DOL): "nur A+ Setups"
 //
 //  Jede Order trägt im Kommentar alle Setup-Merkmale (Feature-Tag) für die
 //  Auswertung mit tools/analyze_trades.py (Strategietester → Trade-Liste exportieren).
@@ -58,6 +60,8 @@ dolMode   = input.string("Hierarchie", "DOL-Quelle", options = ["Hierarchie", "R
 asiaSess  = input.session("2000-0000", "Asia-Session (NY)", group = G2b)
 lonSess   = input.session("0200-0500", "London-Session (NY)", group = G2b)
 reqDol    = input.bool(false, "DOL mit RR ≥ Min erforderlich", tooltip = "Setup nur, wenn eine unberührte Liquidität mindestens Min-RR entfernt liegt.", group = G2b)
+eqPiv     = input.int(5, "Equal H/L: Swing-Länge", minval = 1, group = G2b)
+eqTolAtr  = input.float(0.15, "Equal H/L: Toleranz (× ATR)", minval = 0.01, step = 0.05, group = G2b)
 showLiq   = input.bool(true, "Unberührte Liquidität anzeigen", group = G2b)
 
 const string G3 = "3 · Inducement, IFVG, CISD, SMT"
@@ -69,11 +73,14 @@ useSmt    = input.bool(false, "SMT berechnen", group = G3)
 reqSmt    = input.bool(false, "SMT erforderlich", group = G3)
 cmpSym    = input.symbol("CME_MINI:ES1!", "SMT-Vergleichssymbol", group = G3)
 smtLen    = input.int(20, "SMT-Referenz (Bars vor Tap)", minval = 2, group = G3)
+vBars     = input.int(5, "V-Shape: max. Bars Extrem → CISD", minval = 1, tooltip = "V-Shape = IFVG + CISD innerhalb weniger Bars nach dem Extrem (Bonus laut Werlein).", group = G3)
+minQ      = input.int(0, "Min. Qualitäts-Score (0–6)", minval = 0, maxval = 6, tooltip = "1 Punkt je: Premium/Discount, Sweep, IFVG, SMT, V-Shape, Equal-H/L als DOL. 0 = aus.", group = G3)
 
 const string G4 = "4 · Entry & Exit"
 const string EM_LIMIT  = "Limit @ CISD-Retest"
 const string EM_MARKET = "Market @ CISD-Close"
-entryMode = input.string(EM_LIMIT, "Entry", options = [EM_LIMIT, EM_MARKET], group = G4)
+const string EM_IFVG   = "Limit @ IFVG-Retest"
+entryMode = input.string(EM_LIMIT, "Entry", options = [EM_LIMIT, EM_IFVG, EM_MARKET], tooltip = "IFVG-Retest: Limit an der Kante des invertierten FVG; ohne IFVG wird das CISD-Level genutzt.", group = G4)
 entryExp  = input.int(15, "Limit-Gültigkeit (Bars)", minval = 1, group = G4)
 slBuf     = input.int(2, "SL-Puffer (Ticks)", minval = 0, group = G4)
 tpMode    = input.string("SD-Projektion", "Take-Profit", options = ["SD-Projektion", "DOL", "Fixes R"],
@@ -202,7 +209,82 @@ if nz(swL) != nz(swL[1])
 swHT := swHT or (not na(swH) and high > swH)
 swLT := swLT or (not na(swL) and low < swL)
 
-var array<string> DOL_NAMES = array.from("—", "HTF-Swing", "PDH/PDL", "Asia", "London")
+// Relative Equal Highs/Lows: zwei unberührte Swings innerhalb der Toleranz (stärkste DOL laut Werlein)
+type Liq
+    float lv
+    int   bar
+    bool  taken = false
+    line  ln    = na
+
+var array<Liq> pivH = array.new<Liq>()
+var array<Liq> pivL = array.new<Liq>()
+var array<Liq> eqHs = array.new<Liq>()
+var array<Liq> eqLs = array.new<Liq>()
+eqTol = eqTolAtr * nz(atr, 10 * syminfo.mintick)
+
+f_markTaken(array<Liq> arr, int d, float tol) =>
+    for x in arr
+        if not x.taken
+            if d == 1 ? high > x.lv + tol : low < x.lv - tol
+                x.taken := true
+                if not na(x.ln)
+                    line.set_x2(x.ln, bar_index)
+                    line.set_style(x.ln, line.style_dotted)
+                    line.set_color(x.ln, color.new(color.gray, 60))
+            else if not na(x.ln)
+                line.set_x2(x.ln, bar_index)
+    0
+
+f_markTaken(pivH, 1, eqTol)
+f_markTaken(pivL, -1, eqTol)
+f_markTaken(eqHs, 1, 0.0)
+f_markTaken(eqLs, -1, 0.0)
+
+eqPH = ta.pivothigh(high, eqPiv, eqPiv)
+eqPL = ta.pivotlow(low, eqPiv, eqPiv)
+if not na(eqPH)
+    int pb = bar_index - eqPiv
+    for p in pivH
+        if not p.taken and math.abs(eqPH - p.lv) <= eqTol and pb - p.bar > eqPiv
+            Liq e = Liq.new(math.max(eqPH, p.lv), p.bar)
+            if showLiq
+                e.ln := line.new(p.bar, e.lv, bar_index, e.lv, color = color.new(color.yellow, 10), width = 2)
+                label.new(p.bar, e.lv, "EQH", style = label.style_label_down, color = color.new(color.yellow, 100), textcolor = color.yellow, size = size.tiny)
+            eqHs.push(e)
+            if eqHs.size() > 8
+                eqHs.shift()
+            break
+    pivH.push(Liq.new(eqPH, pb))
+    if pivH.size() > 15
+        pivH.shift()
+if not na(eqPL)
+    int pb = bar_index - eqPiv
+    for p in pivL
+        if not p.taken and math.abs(eqPL - p.lv) <= eqTol and pb - p.bar > eqPiv
+            Liq e = Liq.new(math.min(eqPL, p.lv), p.bar)
+            if showLiq
+                e.ln := line.new(p.bar, e.lv, bar_index, e.lv, color = color.new(color.yellow, 10), width = 2)
+                label.new(p.bar, e.lv, "EQL", style = label.style_label_up, color = color.new(color.yellow, 100), textcolor = color.yellow, size = size.tiny)
+            eqLs.push(e)
+            if eqLs.size() > 8
+                eqLs.shift()
+            break
+    pivL.push(Liq.new(eqPL, pb))
+    if pivL.size() > 15
+        pivL.shift()
+
+// true, wenn unberührte Equal H/L in Richtung d jenseits von ref liegen
+f_hasEq(int d, float ref) =>
+    bool found = false
+    if d == 1
+        for x in eqHs
+            found := found or (not x.taken and x.lv > ref)
+    else
+        for x in eqLs
+            found := found or (not x.taken and x.lv < ref)
+    found
+
+var array<string> DOL_NAMES = array.from("—", "HTF-Swing", "PDH/PDL", "Asia", "London", "Equal H/L")
 
 // Nächste unberührte Liquidität in Richtung d, mindestens minDist vom Referenzpreis entfernt → [Level, Quelle 1–4]
 f_dol(int d, float ref, float minDist) =>
@@ -220,6 +302,16 @@ f_dol(int d, float ref, float minDist) =>
             if not na(lv) and not tk and d * (lv - ref) > minDist and (na(best) or d * (lv - best) < 0)
                 best := lv
                 src  := i + 1
+        if d == 1
+            for x in eqHs
+                if not x.taken and x.lv - ref > minDist and (na(best) or x.lv < best)
+                    best := x.lv
+                    src  := 5
+        else
+            for x in eqLs
+                if not x.taken and ref - x.lv > minDist and (na(best) or x.lv > best)
+                    best := x.lv
+                    src  := 5
     [best, src]
 
 // ───────────────────────────── HTF-FVGs ─────────────────────────────
@@ -320,17 +412,19 @@ if low > high[2]
 
 // Gibt true zurück, wenn in diesem Bar ein LTF-FVG des Legs invertiert wurde
 f_checkIfvg(array<LFvg> arr, int d, int fromBar, bool draw) =>
-    bool hit = false
+    bool  hit = false
+    float lvl = na
     for g in arr
         if not g.inv and g.bar >= fromBar
             bool through = d == 1 ? close > g.top : close < g.bot
             if through
                 g.inv := true
                 hit   := true
+                lvl   := d == 1 ? g.top : g.bot
                 if draw
                     box.new(g.bar, g.top, bar_index, g.bot, bgcolor = color.new(color.orange, 78), border_color = color.new(color.orange, 30),
                          text = "IFVG", text_size = size.tiny, text_color = color.orange)
-    hit
+    [hit, lvl]
 
 // SMT-Daten (Vergleichssymbol, gleicher Timeframe)
 string cmpTicker = useSmt ? cmpSym : syminfo.tickerid
@@ -341,12 +435,12 @@ cmpLoRef = ta.lowest(cmpL, smtLen)[1]
 cmpHiRef = ta.highest(cmpH, smtLen)[1]
 
 // ───────────────────────────── Hilfsfunktionen ─────────────────────────────
-f_tag(int d, bool sw, bool ifv, bool smt, float rr, float pd, float fz, float rk, float rd, float ra, int tb, float dl, int ds) =>
+f_tag(int d, bool sw, bool ifv, bool smt, float rr, float pd, float fz, float rk, float rd, float ra, int tb, float dl, int ds, int q, int ve, bool eqd) =>
     (d == 1 ? "L" : "S") + "|sw" + (sw ? "1" : "0") + "|if" + (ifv ? "1" : "0") + "|smt" + (smt ? "1" : "0") +
      "|t" + str.format("{0,number,00}{1,number,00}", hour(time, TZ), minute(time, TZ)) + "|dw" + str.tostring(dayofweek(time, TZ)) +
      "|rr" + str.tostring(rr, "#.##") + "|pd" + str.tostring(pd, "#.##") + "|fz" + str.tostring(fz, "#") +
      "|rk" + str.tostring(rk, "#") + "|rd" + str.tostring(rd, "#") + "|ra" + str.tostring(ra, "#.##") + "|tb" + str.tostring(tb) +
-     "|dl" + str.tostring(dl, "#.##") + "|ds" + str.tostring(ds)
+     "|dl" + str.tostring(dl, "#.##") + "|ds" + str.tostring(ds) + "|q" + str.tostring(q) + "|ve" + str.tostring(ve) + "|eq" + (eqd ? "1" : "0")
 
 // JSON für spätere Webhook-Automatisierung ({{strategy.order.alert_message}})
 f_json(string act, int d, int qty, float e, float sl, float tp) =>
@@ -368,6 +462,7 @@ var float  sAway      = na
 var int    sTapBar    = na
 var bool   sSwept     = false
 var bool   sIfvg      = false
+var float  sIfvgLv    = na
 var bool   sSmt       = false
 var float  sOurRef    = na
 var float  sCmpRef    = na
@@ -437,17 +532,25 @@ if st == 1 and bar_index > sTapBar
         sAway    := d == 1 ? high : low
         sSwept   := sSwept or (d == 1 ? (not na(lastPL) and low < lastPL) : (not na(lastPH) and high > lastPH))
         sIfvg    := false
+        sIfvgLv  := na
     else
         sAway := d == 1 ? math.max(sAway, high) : math.min(sAway, low)
     if not na(d == 1 ? cmpL : cmpH)
         sCmpExt := d == 1 ? math.min(nz(sCmpExt, cmpL), cmpL) : math.max(nz(sCmpExt, cmpH), cmpH)
 
-    bool hit = false
+    bool  hit   = false
+    float hitLv = na
     if d == 1
-        hit := f_checkIfvg(lBear, 1, sLegBar, showSetup)
+        [h1, l1] = f_checkIfvg(lBear, 1, sLegBar, showSetup)
+        hit   := h1
+        hitLv := l1
     else
-        hit := f_checkIfvg(lBull, -1, sLegBar, showSetup)
-    sIfvg := sIfvg or hit
+        [h2, l2] = f_checkIfvg(lBull, -1, sLegBar, showSetup)
+        hit   := h2
+        hitLv := l2
+    if hit
+        sIfvg   := true
+        sIfvgLv := hitLv
 
     bool fvgFail = d == 1 ? close < sF.bot : close > sF.top
     bool timeout = bar_index - sTapBar > maxSetupB
@@ -462,7 +565,7 @@ if st == 1 and bar_index > sTapBar
                  color = color.new(color.gray, 60), textcolor = color.white, size = size.tiny)
     else if cisdOk
         sSmt := useSmt and not na(sCmpExt) and not na(sCmpRef) and not na(sOurRef) and (d == 1 ? (sExt < sOurRef and sCmpExt >= sCmpRef) : (sExt > sOurRef and sCmpExt <= sCmpRef))
-        float entry = math.round_to_mintick(entryMode == EM_MARKET ? close : sCisd)
+        float entry = math.round_to_mintick(entryMode == EM_MARKET ? close : entryMode == EM_IFVG and not na(sIfvgLv) ? sIfvgLv : sCisd)
         float stop  = math.round_to_mintick(sExt - d * slBuf * tick)
         float risk  = d * (entry - stop)
         float legR  = sdLeg == "Inducement-Leg" ? math.abs(sLegFar - sExt) : math.abs(sAway - sExt)
@@ -478,6 +581,12 @@ if st == 1 and bar_index > sTapBar
             tpSrc := dolTpSrc
         int qty = sizeMode == "Fixe Kontrakte" ? fixQty : (risk > 0 ? math.floor(strategy.equity * riskPct / 100 / (risk * syminfo.pointvalue)) : 0)
         qty := math.min(qty, maxQty)
+        int  ve    = bar_index - sExtBar
+        bool vShp  = sIfvg and ve <= vBars
+        bool eqd   = dolMode == "Hierarchie" and f_hasEq(d, entry)
+        float fMid = (sF.top + sF.bot) / 2
+        bool pdOk  = rngOk and (d == 1 ? fMid < eq : fMid > eq)
+        int  q     = (pdOk ? 1 : 0) + (sSwept ? 1 : 0) + (sIfvg ? 1 : 0) + (sSmt ? 1 : 0) + (vShp ? 1 : 0) + (eqd ? 1 : 0)
 
         string fails = ""
         if reqSweep and not sSwept
@@ -496,6 +605,8 @@ if st == 1 and bar_index > sTapBar
             fails += " Qty<1"
         if inNews
             fails += " News"
+        if q < minQ
+            fails += " Q" + str.tostring(q)
 
         // Visualisierung CISD + Inducement (auch für verworfene Setups)
         if showSetup
@@ -511,7 +622,7 @@ if st == 1 and bar_index > sTapBar
         if fails == ""
             float pdPos = rngOk ? ((sF.top + sF.bot) / 2 - rngL) / (rngH - rngL) : -1.0
             string tag = f_tag(d, sSwept, sIfvg, sSmt, rr, pdPos, (sF.top - sF.bot) / tick, risk / tick,
-                 risk * syminfo.pointvalue * qty, atr > 0 ? risk / atr : 0.0, bar_index - sTapBar, dlRR, dolNearSrc)
+                 risk * syminfo.pointvalue * qty, atr > 0 ? risk / atr : 0.0, bar_index - sTapBar, dlRR, dolNearSrc, q, ve, eqd)
             sEntry := entry
             sStop  := stop
             sTp    := tp
@@ -527,11 +638,11 @@ if st == 1 and bar_index > sTapBar
             sArmBar    := bar_index
             sClosedRef := strategy.closedtrades
             sBe        := false
-            lastInfo   := (d == 1 ? "Long" : "Short") + " armiert · RR " + str.tostring(rr, "#.##")
+            lastInfo   := (d == 1 ? "Long" : "Short") + " armiert · RR " + str.tostring(rr, "#.##") + " · Q " + str.tostring(q) + "/6"
             if showSetup
                 dRisk := box.new(bar_index, entry, bar_index + 1, stop, bgcolor = color.new(color.red, 82), border_color = color.new(color.red, 50))
                 dRew  := box.new(bar_index, tp, bar_index + 1, entry, bgcolor = color.new(color.green, 82), border_color = color.new(color.green, 50),
-                     text = "RR " + str.tostring(rr, "#.##") + (tpSrc > 0 ? " · TP " + DOL_NAMES.get(tpSrc) : ""), text_size = size.tiny, text_color = color.green, text_halign = text.align_right)
+                     text = "RR " + str.tostring(rr, "#.##") + " · Q" + str.tostring(q) + (vShp ? " · V" : "") + (tpSrc > 0 ? " · TP " + DOL_NAMES.get(tpSrc) : ""), text_size = size.tiny, text_color = color.green, text_halign = text.align_right)
                 if not na(dolNear)
                     line.new(bar_index, dolNear, bar_index + 15, dolNear, color = color.new(color.lime, 0), width = 2)
                     label.new(bar_index + 15, dolNear, "DOL " + DOL_NAMES.get(dolNearSrc), style = label.style_label_left,
