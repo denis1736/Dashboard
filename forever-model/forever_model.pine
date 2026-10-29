@@ -1,0 +1,532 @@
+//@version=6
+// ════════════════════════════════════════════════════════════════════════════
+//  Forever Model (Justin Werlein) – mechanisierte Interpretation · v1
+//
+//  Ablauf je Setup (Long; Short spiegelbildlich):
+//   1. Dealing Range (HTF-Swings oder Vortag) → EQ 50 % → Premium/Discount
+//   2. Bullisches HTF-FVG (Default 1H) im Discount, Draw on Liquidity = Range-High
+//   3. Tap: LTF-Preis läuft in das HTF-FVG
+//   4. Inducement: das Tief im FVG nimmt ein LTF-Swing-Tief (Sweep)
+//   5. optional IFVG: bärisches LTF-FVG des Abwärts-Legs wird überschlossen
+//   6. CISD: Close über dem Open der ersten Kerze der letzten bärischen Serie
+//   7. Entry: Limit am CISD-Level (Retest), SL unter dem Inducement-Tief
+//   8. TP: SD-Projektion des Legs (Default 2,5) – Fallback DOL, min. RR
+//
+//  Jede Order trägt im Kommentar alle Setup-Merkmale (Feature-Tag) für die
+//  Auswertung mit tools/analyze_trades.py (Strategietester → Trade-Liste exportieren).
+// ════════════════════════════════════════════════════════════════════════════
+strategy("Forever Model – Werlein [v1]", shorttitle = "FM v1", overlay = true,
+     initial_capital = 50000, currency = currency.USD,
+     default_qty_type = strategy.fixed, default_qty_value = 1,
+     commission_type = strategy.commission.cash_per_contract, commission_value = 2.5,
+     slippage = 1, pyramiding = 0,
+     backtest_fill_limits_assumption = 1, use_bar_magnifier = true,
+     max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 2000)
+
+const string TZ = "America/New_York"
+
+// ───────────────────────────── Inputs ─────────────────────────────
+const string G1 = "1 · Session & Filter"
+sessEntry = input.session("0930-1100", "Entry-Fenster (NY)", group = G1)
+sessFlat  = input.session("1545-1600", "Zwangs-Flat (NY)", group = G1)
+dirMode   = input.string("Beide", "Richtung", options = ["Beide", "Nur Long", "Nur Short"], group = G1)
+maxTrades = input.int(2, "Max. Trades pro Tag", minval = 1, group = G1)
+monOk     = input.bool(true, "Mo", inline = "dow", group = G1)
+tueOk     = input.bool(true, "Di", inline = "dow", group = G1)
+wedOk     = input.bool(true, "Mi", inline = "dow", group = G1)
+thuOk     = input.bool(true, "Do", inline = "dow", group = G1)
+friOk     = input.bool(true, "Fr", inline = "dow", group = G1)
+useNews1  = input.bool(false, "News-Sperre 1", inline = "n1", group = G1)
+sessNews1 = input.session("0955-1010", "", inline = "n1", group = G1)
+useNews2  = input.bool(false, "News-Sperre 2", inline = "n2", group = G1)
+sessNews2 = input.session("1355-1415", "", inline = "n2", group = G1)
+
+const string G2 = "2 · HTF-FVG & Dealing Range"
+htfTF     = input.timeframe("60", "HTF für FVGs", group = G2)
+minFvgT   = input.int(8, "Min. HTF-FVG-Größe (Ticks)", minval = 1, group = G2)
+maxFvgAge = input.int(72, "Max. FVG-Alter (HTF-Bars)", minval = 1, group = G2)
+maxFvgs   = input.int(10, "Max. aktive HTF-FVGs", minval = 1, maxval = 40, group = G2)
+onePerFvg = input.bool(true, "Nur ein Setup pro FVG", group = G2)
+rangeSrc  = input.string("HTF-Swings", "Dealing Range", options = ["HTF-Swings", "Vortag"], group = G2)
+htfPiv    = input.int(3, "HTF-Swing-Länge", minval = 1, group = G2)
+usePD     = input.bool(true, "Premium/Discount-Filter", tooltip = "Long nur mit FVG unter EQ, Short nur über EQ.", group = G2)
+
+const string G3 = "3 · Inducement, IFVG, CISD, SMT"
+ltfPiv    = input.int(3, "LTF-Swing-Länge", minval = 1, group = G3)
+reqSweep  = input.bool(true, "Inducement-Sweep erforderlich", group = G3)
+reqIfvg   = input.bool(false, "IFVG erforderlich", group = G3)
+maxSetupB = input.int(45, "Max. Bars Tap → CISD", minval = 1, group = G3)
+useSmt    = input.bool(false, "SMT berechnen", group = G3)
+reqSmt    = input.bool(false, "SMT erforderlich", group = G3)
+cmpSym    = input.symbol("CME_MINI:ES1!", "SMT-Vergleichssymbol", group = G3)
+smtLen    = input.int(20, "SMT-Referenz (Bars vor Tap)", minval = 2, group = G3)
+
+const string G4 = "4 · Entry & Exit"
+const string EM_LIMIT  = "Limit @ CISD-Retest"
+const string EM_MARKET = "Market @ CISD-Close"
+entryMode = input.string(EM_LIMIT, "Entry", options = [EM_LIMIT, EM_MARKET], group = G4)
+entryExp  = input.int(15, "Limit-Gültigkeit (Bars)", minval = 1, group = G4)
+slBuf     = input.int(2, "SL-Puffer (Ticks)", minval = 0, group = G4)
+tpMode    = input.string("SD-Projektion", "Take-Profit", options = ["SD-Projektion", "Fixes R"], group = G4)
+sdLeg     = input.string("Inducement-Leg", "SD-Anker", options = ["Inducement-Leg", "CISD-Leg"],
+     tooltip = "TP = Extrem + SD × Leg-Range in Trade-Richtung. Inducement-Leg: Swing vor dem Sweep → Extrem. CISD-Leg: Extrem → höchster Punkt bis zum CISD.", group = G4)
+sdMult    = input.float(2.5, "SD-Multiplikator", minval = 0.5, step = 0.25, group = G4)
+fixR      = input.float(2.5, "Fixes R", minval = 0.5, step = 0.25, group = G4)
+minRR     = input.float(2.0, "Min. RR", minval = 0.5, step = 0.25, group = G4)
+dolFb     = input.bool(true, "DOL als TP-Fallback, wenn RR < Min", group = G4)
+beR       = input.float(0.0, "Break-Even ab R (0 = aus)", minval = 0, step = 0.25, group = G4)
+
+const string G5 = "5 · Positionsgröße"
+sizeMode  = input.string("Fixe Kontrakte", "Modus", options = ["Fixe Kontrakte", "Risiko % Equity"], group = G5)
+fixQty    = input.int(1, "Kontrakte", minval = 1, group = G5)
+riskPct   = input.float(0.5, "Risiko % pro Trade", minval = 0.05, step = 0.05, group = G5)
+maxQty    = input.int(20, "Max. Kontrakte", minval = 1, group = G5)
+
+const string G6 = "6 · Visualisierung"
+showFvg   = input.bool(true, "HTF-FVGs", group = G6)
+showRange = input.bool(true, "Dealing Range / EQ / Premium-Discount", group = G6)
+showPiv   = input.bool(false, "LTF-Swings", group = G6)
+showSetup = input.bool(true, "Setup (Tap, Inducement, IFVG, CISD, Entry/SL/TP)", group = G6)
+showSD    = input.bool(true, "SD-Level (1 / 2 / 2,5)", group = G6)
+showSkips = input.bool(true, "Verworfene Setups mit Grund", group = G6)
+showSess  = input.bool(true, "Entry-Fenster einfärben", group = G6)
+showTable = input.bool(true, "Status-Tabelle", group = G6)
+colBull   = input.color(color.new(color.teal, 82), "FVG bullisch", group = G6)
+colBear   = input.color(color.new(color.red, 82), "FVG bärisch", group = G6)
+
+// ───────────────────────────── Basis ─────────────────────────────
+tick = syminfo.mintick
+
+inS(string s) =>
+    not na(time(timeframe.period, s, TZ))
+
+inEntry = inS(sessEntry)
+inFlat  = inS(sessFlat)
+inNews  = (useNews1 and inS(sessNews1)) or (useNews2 and inS(sessNews2))
+dw      = dayofweek(time, TZ)
+dowOk   = (dw == dayofweek.monday and monOk) or (dw == dayofweek.tuesday and tueOk) or (dw == dayofweek.wednesday and wedOk) or (dw == dayofweek.thursday and thuOk) or (dw == dayofweek.friday and friOk)
+allowL  = dirMode != "Nur Short"
+allowS  = dirMode != "Nur Long"
+
+if barstate.isfirst and timeframe.in_seconds() >= timeframe.in_seconds(htfTF)
+    runtime.error("Chart-Timeframe muss kleiner als der HTF sein (empfohlen: 1, 3 oder 5 Minuten).")
+
+htfSec   = timeframe.in_seconds(htfTF)
+htfName  = htfSec >= 3600 ? str.tostring(htfSec / 3600.0, "#.#") + "H" : str.tostring(htfSec / 60.0, "#") + "m"
+
+newDay = dayofmonth(time, TZ) != dayofmonth(time[1], TZ)
+var int tradesToday = 0
+if newDay
+    tradesToday := 0
+
+atr = ta.atr(14)
+
+// ───────────────────────────── HTF-Daten (non-repainting) ─────────────────────────────
+[hH1, hL1, hH3, hL3, hT1, hT3] = request.security(syminfo.tickerid, htfTF, [high[1], low[1], high[3], low[3], time[1], time[3]], lookahead = barmerge.lookahead_on)
+htfNew = not na(hT1) and (na(hT1[1]) or hT1 != hT1[1])
+
+f_htfSwings() =>
+    ph = ta.pivothigh(high, htfPiv, htfPiv)
+    pl = ta.pivotlow(low, htfPiv, htfPiv)
+    var float lph = na
+    var float lpl = na
+    if not na(ph)
+        lph := ph
+    if not na(pl)
+        lpl := pl
+    [lph[1], lpl[1]]
+
+[swH, swL] = request.security(syminfo.tickerid, htfTF, f_htfSwings(), lookahead = barmerge.lookahead_on)
+[pdH, pdL] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+
+rngH  = rangeSrc == "HTF-Swings" ? swH : pdH
+rngL  = rangeSrc == "HTF-Swings" ? swL : pdL
+rngOk = not na(rngH) and not na(rngL) and rngH > rngL
+eq    = rngOk ? (rngH + rngL) / 2 : na
+
+// ───────────────────────────── HTF-FVGs ─────────────────────────────
+type HFvg
+    float top
+    float bot
+    int   dir
+    int   t0
+    int   born
+    bool  used = false
+    box   bx   = na
+
+var array<HFvg> hfvgs = array.new<HFvg>()
+var int htfCount = 0
+
+if htfNew
+    htfCount += 1
+    if hL1 > hH3 and hL1 - hH3 >= minFvgT * tick
+        HFvg f = HFvg.new(hL1, hH3, 1, hT3, htfCount)
+        if showFvg
+            f.bx := box.new(hT3, hL1, time, hH3, xloc = xloc.bar_time, bgcolor = colBull, border_color = color.new(color.teal, 60),
+                 text = htfName + " FVG", text_size = size.tiny, text_color = color.new(color.teal, 10), text_halign = text.align_right, text_valign = text.align_top)
+        hfvgs.push(f)
+    if hH1 < hL3 and hL3 - hH1 >= minFvgT * tick
+        HFvg f = HFvg.new(hL3, hH1, -1, hT3, htfCount)
+        if showFvg
+            f.bx := box.new(hT3, hL3, time, hH1, xloc = xloc.bar_time, bgcolor = colBear, border_color = color.new(color.red, 60),
+                 text = htfName + " FVG", text_size = size.tiny, text_color = color.new(color.red, 10), text_halign = text.align_right, text_valign = text.align_bottom)
+        hfvgs.push(f)
+    while hfvgs.size() > maxFvgs
+        hfvgs.shift()
+
+// Invalidierung (Close durch die ferne Seite oder zu alt), sonst Box verlängern
+if hfvgs.size() > 0
+    for i = hfvgs.size() - 1 to 0
+        HFvg f = hfvgs.get(i)
+        bool dead = (f.dir == 1 and close < f.bot) or (f.dir == -1 and close > f.top) or (htfCount - f.born > maxFvgAge)
+        if not na(f.bx)
+            box.set_right(f.bx, time)
+        if dead
+            if not na(f.bx)
+                box.set_bgcolor(f.bx, color.new(color.gray, 92))
+                box.set_border_color(f.bx, color.new(color.gray, 80))
+                box.set_text_color(f.bx, color.new(color.gray, 50))
+            hfvgs.remove(i)
+
+// ───────────────────────────── LTF-Struktur ─────────────────────────────
+ltfPH = ta.pivothigh(high, ltfPiv, ltfPiv)
+ltfPL = ta.pivotlow(low, ltfPiv, ltfPiv)
+var float lastPH    = na
+var int   lastPHBar = na
+var float lastPL    = na
+var int   lastPLBar = na
+if not na(ltfPH)
+    lastPH    := ltfPH
+    lastPHBar := bar_index - ltfPiv
+if not na(ltfPL)
+    lastPL    := ltfPL
+    lastPLBar := bar_index - ltfPiv
+
+lenPH     = math.max(1, math.min(1000, bar_index - nz(lastPHBar, bar_index) + 1))
+lenPL     = math.max(1, math.min(1000, bar_index - nz(lastPLBar, bar_index) + 1))
+hiSincePH = ta.highest(high, lenPH)
+loSincePL = ta.lowest(low, lenPL)
+
+plotshape(showPiv and not na(ltfPH), "LTF Swing High", shape.triangledown, location.abovebar, color.new(color.gray, 40), offset = -ltfPiv, size = size.tiny)
+plotshape(showPiv and not na(ltfPL), "LTF Swing Low", shape.triangleup, location.belowbar, color.new(color.gray, 40), offset = -ltfPiv, size = size.tiny)
+
+// Kerzen-Serien für CISD: Open der ersten Kerze der letzten bärischen / bullischen Serie
+var float bearRunOpen = na
+var int   bearRunBar  = na
+var float bullRunOpen = na
+var int   bullRunBar  = na
+if close < open and not (close[1] < open[1])
+    bearRunOpen := open
+    bearRunBar  := bar_index
+if close > open and not (close[1] > open[1])
+    bullRunOpen := open
+    bullRunBar  := bar_index
+
+// LTF-FVG-Puffer für IFVG
+type LFvg
+    float top
+    float bot
+    int   bar
+    bool  inv = false
+
+var array<LFvg> lBear = array.new<LFvg>()
+var array<LFvg> lBull = array.new<LFvg>()
+if high < low[2]
+    lBear.push(LFvg.new(low[2], high, bar_index - 1))
+    if lBear.size() > 20
+        lBear.shift()
+if low > high[2]
+    lBull.push(LFvg.new(low, high[2], bar_index - 1))
+    if lBull.size() > 20
+        lBull.shift()
+
+// Gibt true zurück, wenn in diesem Bar ein LTF-FVG des Legs invertiert wurde
+f_checkIfvg(array<LFvg> arr, int d, int fromBar, bool draw) =>
+    bool hit = false
+    for g in arr
+        if not g.inv and g.bar >= fromBar
+            bool through = d == 1 ? close > g.top : close < g.bot
+            if through
+                g.inv := true
+                hit   := true
+                if draw
+                    box.new(g.bar, g.top, bar_index, g.bot, bgcolor = color.new(color.orange, 78), border_color = color.new(color.orange, 30),
+                         text = "IFVG", text_size = size.tiny, text_color = color.orange)
+    hit
+
+// SMT-Daten (Vergleichssymbol, gleicher Timeframe)
+string cmpTicker = useSmt ? cmpSym : syminfo.tickerid
+[cmpH, cmpL] = request.security(cmpTicker, timeframe.period, [high, low])
+ourLoRef = ta.lowest(low, smtLen)[1]
+ourHiRef = ta.highest(high, smtLen)[1]
+cmpLoRef = ta.lowest(cmpL, smtLen)[1]
+cmpHiRef = ta.highest(cmpH, smtLen)[1]
+
+// ───────────────────────────── Hilfsfunktionen ─────────────────────────────
+f_tag(int d, bool sw, bool ifv, bool smt, float rr, float pd, float fz, float rk, float rd, float ra, int tb) =>
+    (d == 1 ? "L" : "S") + "|sw" + (sw ? "1" : "0") + "|if" + (ifv ? "1" : "0") + "|smt" + (smt ? "1" : "0") +
+     "|t" + str.format("{0,number,00}{1,number,00}", hour(time, TZ), minute(time, TZ)) + "|dw" + str.tostring(dayofweek(time, TZ)) +
+     "|rr" + str.tostring(rr, "#.##") + "|pd" + str.tostring(pd, "#.##") + "|fz" + str.tostring(fz, "#") +
+     "|rk" + str.tostring(rk, "#") + "|rd" + str.tostring(rd, "#") + "|ra" + str.tostring(ra, "#.##") + "|tb" + str.tostring(tb)
+
+// JSON für spätere Webhook-Automatisierung ({{strategy.order.alert_message}})
+f_json(string act, int d, int qty, float e, float sl, float tp) =>
+    '{"ticker":"' + syminfo.ticker + '","action":"' + act + '","side":"' + (d == 1 ? "buy" : "sell") + '","qty":' + str.tostring(qty) +
+     ',"entry":' + str.tostring(e, format.mintick) + ',"sl":' + str.tostring(sl, format.mintick) + ',"tp":' + str.tostring(tp, format.mintick) + '}'
+
+// ───────────────────────────── Setup-Zustand ─────────────────────────────
+// st: 0 = warte auf Tap · 1 = getappt, warte auf CISD · 2 = Limit aktiv · 3 = im Trade
+var int    st         = 0
+var int    sDir       = 0
+var HFvg   sF         = na
+var float  sExt       = na
+var int    sExtBar    = na
+var float  sCisd      = na
+var int    sCisdBar   = na
+var float  sLegFar    = na
+var int    sLegBar    = na
+var float  sAway      = na
+var int    sTapBar    = na
+var bool   sSwept     = false
+var bool   sIfvg      = false
+var bool   sSmt       = false
+var float  sOurRef    = na
+var float  sCmpRef    = na
+var float  sCmpExt    = na
+var float  sEntry     = na
+var float  sStop      = na
+var float  sTp        = na
+var float  sRisk      = na
+var int    sArmBar    = na
+var int    sClosedRef = 0
+var bool   sBe        = false
+var string sId        = ""
+var string sXId       = ""
+var box    dRisk      = na
+var box    dRew       = na
+var string lastInfo   = "—"
+
+bool canStart = inEntry and dowOk and not inNews and tradesToday < maxTrades and strategy.position_size == 0
+
+// ── 0 → 1: Tap in ein HTF-FVG
+if st == 0 and canStart and hfvgs.size() > 0
+    for f in hfvgs
+        if not (onePerFvg and f.used)
+            float mid   = (f.top + f.bot) / 2
+            bool  touch = low <= f.top and high >= f.bot
+            int   d     = 0
+            if touch and f.dir == 1 and allowL and (not usePD or (rngOk and mid < eq))
+                d := 1
+            else if touch and f.dir == -1 and allowS and (not usePD or (rngOk and mid > eq))
+                d := -1
+            if d != 0
+                f.used   := true
+                st       := 1
+                sDir     := d
+                sF       := f
+                sExt     := d == 1 ? low : high
+                sExtBar  := bar_index
+                sCisd    := d == 1 ? nz(bearRunOpen, open) : nz(bullRunOpen, open)
+                sCisdBar := d == 1 ? nz(bearRunBar, bar_index) : nz(bullRunBar, bar_index)
+                sLegFar  := d == 1 ? hiSincePH : loSincePL
+                sLegBar  := d == 1 ? nz(lastPHBar, bar_index) : nz(lastPLBar, bar_index)
+                sAway    := d == 1 ? high : low
+                sTapBar  := bar_index
+                sSwept   := d == 1 ? (not na(lastPL) and low < lastPL) : (not na(lastPH) and high > lastPH)
+                sIfvg    := false
+                sSmt     := false
+                sOurRef  := d == 1 ? ourLoRef : ourHiRef
+                sCmpRef  := d == 1 ? cmpLoRef : cmpHiRef
+                sCmpExt  := d == 1 ? cmpL : cmpH
+                lastInfo := (d == 1 ? "Long" : "Short") + "-Tap " + htfName + " FVG"
+                if showSetup
+                    label.new(bar_index, d == 1 ? low : high, "Tap", style = d == 1 ? label.style_label_up : label.style_label_down,
+                         color = color.new(color.gray, 25), textcolor = color.white, size = size.tiny)
+                break
+
+// ── 1: Inducement / IFVG / CISD verfolgen
+if st == 1 and bar_index > sTapBar
+    int d = sDir
+    bool newExt = d == 1 ? low < sExt : high > sExt
+    if newExt
+        sExt     := d == 1 ? low : high
+        sExtBar  := bar_index
+        sCisd    := d == 1 ? nz(bearRunOpen, open) : nz(bullRunOpen, open)
+        sCisdBar := d == 1 ? nz(bearRunBar, bar_index) : nz(bullRunBar, bar_index)
+        sLegFar  := d == 1 ? hiSincePH : loSincePL
+        sLegBar  := d == 1 ? nz(lastPHBar, bar_index) : nz(lastPLBar, bar_index)
+        sAway    := d == 1 ? high : low
+        sSwept   := sSwept or (d == 1 ? (not na(lastPL) and low < lastPL) : (not na(lastPH) and high > lastPH))
+        sIfvg    := false
+    else
+        sAway := d == 1 ? math.max(sAway, high) : math.min(sAway, low)
+    if not na(d == 1 ? cmpL : cmpH)
+        sCmpExt := d == 1 ? math.min(nz(sCmpExt, cmpL), cmpL) : math.max(nz(sCmpExt, cmpH), cmpH)
+
+    bool hit = false
+    if d == 1
+        hit := f_checkIfvg(lBear, 1, sLegBar, showSetup)
+    else
+        hit := f_checkIfvg(lBull, -1, sLegBar, showSetup)
+    sIfvg := sIfvg or hit
+
+    bool fvgFail = d == 1 ? close < sF.bot : close > sF.top
+    bool timeout = bar_index - sTapBar > maxSetupB
+    bool cisdOk  = d == 1 ? close > sCisd : close < sCisd
+
+    if fvgFail or timeout or not inEntry or not dowOk
+        st := 0
+        string why = fvgFail ? "FVG gebrochen" : timeout ? "Timeout" : "Fenster vorbei"
+        lastInfo := "✗ " + why
+        if showSkips
+            label.new(bar_index, d == 1 ? low : high, "✗ " + why, style = d == 1 ? label.style_label_up : label.style_label_down,
+                 color = color.new(color.gray, 60), textcolor = color.white, size = size.tiny)
+    else if cisdOk
+        sSmt := useSmt and not na(sCmpExt) and not na(sCmpRef) and not na(sOurRef) and (d == 1 ? (sExt < sOurRef and sCmpExt >= sCmpRef) : (sExt > sOurRef and sCmpExt <= sCmpRef))
+        float entry = math.round_to_mintick(entryMode == EM_MARKET ? close : sCisd)
+        float stop  = math.round_to_mintick(sExt - d * slBuf * tick)
+        float risk  = d * (entry - stop)
+        float legR  = sdLeg == "Inducement-Leg" ? math.abs(sLegFar - sExt) : math.abs(sAway - sExt)
+        float tp    = math.round_to_mintick(tpMode == "SD-Projektion" ? sExt + d * sdMult * legR : entry + d * fixR * risk)
+        float rr    = risk > 0 ? d * (tp - entry) / risk : 0.0
+        float dol   = d == 1 ? rngH : rngL
+        if rr < minRR and dolFb and rngOk and risk > 0 and d * (dol - entry) / risk >= minRR
+            tp := math.round_to_mintick(dol)
+            rr := d * (tp - entry) / risk
+        int qty = sizeMode == "Fixe Kontrakte" ? fixQty : (risk > 0 ? math.floor(strategy.equity * riskPct / 100 / (risk * syminfo.pointvalue)) : 0)
+        qty := math.min(qty, maxQty)
+
+        string fails = ""
+        if reqSweep and not sSwept
+            fails += " Sweep"
+        if reqIfvg and not sIfvg
+            fails += " IFVG"
+        if useSmt and reqSmt and not sSmt
+            fails += " SMT"
+        if risk <= 0
+            fails += " Risk≤0"
+        if rr < minRR
+            fails += " RR " + str.tostring(rr, "#.#")
+        if qty < 1
+            fails += " Qty<1"
+        if inNews
+            fails += " News"
+
+        // Visualisierung CISD + Inducement (auch für verworfene Setups)
+        if showSetup
+            line.new(sCisdBar, sCisd, bar_index, sCisd, color = color.yellow, width = 2)
+            label.new(bar_index, sCisd, "CISD", style = label.style_label_left, color = color.new(color.yellow, 100), textcolor = color.yellow, size = size.tiny)
+            line.new(sExtBar, sExt, bar_index, sExt, color = color.new(color.fuchsia, 0), style = line.style_dotted)
+            label.new(sExtBar, sExt, sSwept ? "Inducement ✓ Sweep" : "Inducement", style = d == 1 ? label.style_label_up : label.style_label_down,
+                 color = color.new(color.fuchsia, 100), textcolor = color.fuchsia, size = size.tiny)
+            if useSmt and sSmt
+                label.new(sExtBar, sExt, "SMT", style = d == 1 ? label.style_label_upper_left : label.style_label_lower_left,
+                     color = color.new(color.aqua, 100), textcolor = color.aqua, size = size.tiny)
+
+        if fails == ""
+            float pdPos = rngOk ? ((sF.top + sF.bot) / 2 - rngL) / (rngH - rngL) : -1.0
+            string tag = f_tag(d, sSwept, sIfvg, sSmt, rr, pdPos, (sF.top - sF.bot) / tick, risk / tick,
+                 risk * syminfo.pointvalue * qty, atr > 0 ? risk / atr : 0.0, bar_index - sTapBar)
+            sEntry := entry
+            sStop  := stop
+            sTp    := tp
+            sRisk  := risk
+            sId    := d == 1 ? "FM-L" : "FM-S"
+            sXId   := sId + "-X"
+            if entryMode == EM_MARKET
+                strategy.entry(sId, d == 1 ? strategy.long : strategy.short, qty = qty, comment = tag, alert_message = f_json("entry", d, qty, entry, stop, tp))
+            else
+                strategy.entry(sId, d == 1 ? strategy.long : strategy.short, qty = qty, limit = entry, comment = tag, alert_message = f_json("entry", d, qty, entry, stop, tp))
+            strategy.exit(sXId, sId, stop = stop, limit = tp, comment_loss = "SL", comment_profit = "TP", alert_message = f_json("exit", -d, qty, entry, stop, tp))
+            st         := 2
+            sArmBar    := bar_index
+            sClosedRef := strategy.closedtrades
+            sBe        := false
+            lastInfo   := (d == 1 ? "Long" : "Short") + " armiert · RR " + str.tostring(rr, "#.##")
+            if showSetup
+                dRisk := box.new(bar_index, entry, bar_index + 1, stop, bgcolor = color.new(color.red, 82), border_color = color.new(color.red, 50))
+                dRew  := box.new(bar_index, tp, bar_index + 1, entry, bgcolor = color.new(color.green, 82), border_color = color.new(color.green, 50),
+                     text = "RR " + str.tostring(rr, "#.##"), text_size = size.tiny, text_color = color.green, text_halign = text.align_right)
+            if showSD and legR > 0
+                for k in array.from(1.0, 2.0, 2.5)
+                    float lv = sExt + d * k * legR
+                    line.new(sExtBar, lv, bar_index + 15, lv, color = color.new(color.silver, 30), style = line.style_dashed)
+                    label.new(bar_index + 15, lv, str.tostring(k) + " SD", style = label.style_label_left, color = color.new(color.silver, 100),
+                         textcolor = color.silver, size = size.tiny)
+        else
+            st       := 0
+            lastInfo := "✗" + fails
+            if showSkips
+                label.new(bar_index, d == 1 ? high : low, "✗" + fails, style = d == 1 ? label.style_label_down : label.style_label_up,
+                     color = color.new(color.gray, 60), textcolor = color.white, size = size.tiny)
+
+// ── 2: Limit-Order aktiv – Fill, Verfall oder verpasst
+if st == 2 and bar_index > sArmBar
+    int  d      = sDir
+    bool filled = strategy.position_size != 0 or strategy.closedtrades > sClosedRef
+    if filled
+        tradesToday += 1
+        st := strategy.position_size != 0 ? 3 : 0
+    else
+        bool missed  = d == 1 ? high >= sTp : low <= sTp
+        bool expired = bar_index - sArmBar > entryExp
+        if missed or expired or not inEntry or inNews or inFlat
+            strategy.cancel(sId)
+            strategy.cancel(sXId)
+            st       := 0
+            lastInfo := "✗ kein Fill (" + (missed ? "TP zuerst" : expired ? "verfallen" : "Fenster/News") + ")"
+            if showSkips
+                label.new(bar_index, sEntry, "✗ kein Fill", style = label.style_label_left, color = color.new(color.gray, 60), textcolor = color.white, size = size.tiny)
+
+// ── 3: Im Trade – Break-Even
+if st == 3
+    int d = sDir
+    if strategy.position_size == 0
+        st := 0
+    else if beR > 0 and not sBe and (d == 1 ? high >= sEntry + beR * sRisk : low <= sEntry - beR * sRisk)
+        strategy.exit(sXId, sId, stop = sEntry, limit = sTp, comment_loss = "BE", comment_profit = "TP", alert_message = f_json("move_sl", -d, 0, sEntry, sEntry, sTp))
+        sBe := true
+
+if (st == 2 or st == 3) and not na(dRisk)
+    box.set_right(dRisk, bar_index)
+    box.set_right(dRew, bar_index)
+
+// Zwangs-Flat
+if inFlat and strategy.position_size != 0
+    strategy.close_all(comment = "Flat", alert_message = '{"ticker":"' + syminfo.ticker + '","action":"flatten"}')
+
+// ───────────────────────────── Plots ─────────────────────────────
+pH  = plot(showRange and rngOk ? rngH : na, "Range High (DOL Long)", color.new(color.green, 30), 1, plot.style_linebr)
+pEq = plot(showRange and rngOk ? eq : na, "EQ 50%", color.new(color.gray, 20), 1, plot.style_linebr)
+pL  = plot(showRange and rngOk ? rngL : na, "Range Low (DOL Short)", color.new(color.red, 30), 1, plot.style_linebr)
+fill(pH, pEq, color.new(color.red, 96), "Premium")
+fill(pEq, pL, color.new(color.green, 96), "Discount")
+bgcolor(showSess and inEntry ? color.new(color.blue, 94) : na, title = "Entry-Fenster")
+
+// ───────────────────────────── Status-Tabelle ─────────────────────────────
+var table tb = table.new(position.top_right, 2, 9, bgcolor = color.new(color.black, 25), border_width = 1, border_color = color.new(color.gray, 70))
+f_row(int r, string k, string v, color c) =>
+    table.cell(tb, 0, r, k, text_color = color.silver, text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, r, v, text_color = c, text_size = size.small, text_halign = text.align_left)
+
+if showTable and barstate.islast
+    string stTxt = st == 0 ? "Warte auf Tap" : st == 1 ? "Getappt → warte CISD" : st == 2 ? "Limit aktiv" : "Im Trade"
+    float  pos   = rngOk ? (close - rngL) / (rngH - rngL) : na
+    string pdTxt = na(pos) ? "—" : (pos > 0.5 ? "Premium " : "Discount ") + str.tostring(pos * 100, "#") + " %"
+    int    nBull = 0
+    int    nBear = 0
+    for f in hfvgs
+        if f.dir == 1
+            nBull += 1
+        else
+            nBear += 1
+    float wr = strategy.closedtrades > 0 ? strategy.wintrades * 100.0 / strategy.closedtrades : na
+    f_row(0, "Forever Model", "v1", color.white)
+    f_row(1, "Status", stTxt, st == 0 ? color.silver : color.yellow)
+    f_row(2, "Range-Position", pdTxt, na(pos) ? color.silver : pos > 0.5 ? color.red : color.green)
+    f_row(3, htfName + "-FVGs aktiv", str.tostring(nBull) + " bull · " + str.tostring(nBear) + " bear", color.white)
+    f_row(4, "Letztes Ereignis", lastInfo, color.white)
+    f_row(5, "Trades heute", str.tostring(tradesToday) + " / " + str.tostring(maxTrades), color.white)
+    f_row(6, "Trades gesamt", str.tostring(strategy.closedtrades), color.white)
+    f_row(7, "Trefferquote", na(wr) ? "—" : str.tostring(wr, "#.#") + " %", color.white)
+    f_row(8, "Netto", str.tostring(strategy.netprofit, "#,###.##") + " " + syminfo.currency, strategy.netprofit >= 0 ? color.green : color.red)
