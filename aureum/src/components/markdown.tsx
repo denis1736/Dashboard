@@ -20,7 +20,7 @@ export function Markdown({ text }: { text: string }) {
         switch (b.type) {
           case "h":
             return b.level === 1
-              ? <h3 key={i} className="display pt-1 text-[24px] text-text"><Span parts={b.inline} /></h3>
+              ? <h3 key={i} className="display pt-1 text-[20px] text-text"><Span parts={b.inline} /></h3>
               : <h4 key={i} className="pt-2 text-[15px] font-semibold text-text"><Span parts={b.inline} /></h4>;
           case "p":
             return <p key={i}><Span parts={b.inline} /></p>;

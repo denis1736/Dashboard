@@ -75,7 +75,7 @@ export function PageHeader({ title, sub, children }: { title: string; sub?: Reac
   return (
     <div className="rise mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
       <div className="min-w-0">
-        <h1 className="display text-[34px] sm:text-[40px]">{title}</h1>
+        <h1 className="display text-[28px] sm:text-[34px]">{title}</h1>
         {sub && <p className="mt-1.5 max-w-[68ch] text-text-2">{sub}</p>}
       </div>
       {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
@@ -198,7 +198,7 @@ export function Modal({
         >
           <div className="flex items-start justify-between gap-4 border-b border-line px-6 pb-4 pt-5">
             <div className="min-w-0">
-              <RD.Title className="display text-[26px]">{title}</RD.Title>
+              <RD.Title className="display text-[22px]">{title}</RD.Title>
               {description && <p className="mt-1 text-[13px] text-text-2">{description}</p>}
             </div>
             <RD.Close asChild>

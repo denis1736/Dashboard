@@ -45,7 +45,7 @@ export function Wordmark() {
   return (
     <span className="inline-flex items-center gap-2.5">
       <Mark />
-      <span className="display text-[25px] leading-none">Aureum</span>
+      <span className="display text-[22px] leading-none">Aureum</span>
     </span>
   );
 }
@@ -265,7 +265,7 @@ function LockScreen() {
       <form onSubmit={submit} className="card rise w-full max-w-[400px] p-8">
         <Wordmark />
         <div className="rule-gold my-6" />
-        <h1 className="display text-[30px]">Tresor entsperren</h1>
+        <h1 className="display text-[26px]">Tresor entsperren</h1>
         <p className="mb-5 mt-1.5 text-text-2">Ihr Bestand ist auf diesem Gerät verschlüsselt. Die Passphrase wird nicht gespeichert und kann nicht zurückgesetzt werden.</p>
         <Field label="Passphrase">
           <input type="password" autoFocus autoComplete="current-password" className="field" value={pass} onChange={(e) => setPass(e.target.value)} />
@@ -324,7 +324,7 @@ function Onboarding() {
         <div className="pointer-events-none absolute -right-40 -top-40 h-[520px] w-[520px] rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(circle, var(--accent-soft), transparent 65%)" }} />
         <Wordmark />
         <div className="relative">
-          <h1 className="display max-w-[14ch] text-[64px]">Ihr Bestand. Auf den Punkt.</h1>
+          <h1 className="display max-w-[14ch] text-[50px]">Ihr Bestand. Auf den Punkt.</h1>
           <div className="rule-gold my-8 w-40" />
           <ul className="space-y-5">
             {points.map(([t, d], i) => (
@@ -345,7 +345,7 @@ function Onboarding() {
           </div>
           {step === 0 ? (
             <div key="a" className="rise">
-              <h2 className="display text-[36px]">Willkommen.</h2>
+              <h2 className="display text-[30px]">Willkommen.</h2>
               <p className="mb-7 mt-2 text-text-2">Zwei kurze Angaben, dann sehen Sie Ihr Portfolio.</p>
               <Field label="Wie dürfen wir Ihren Bestand nennen?" hint="Erscheint auf Berichten, zum Beispiel Ihr Name oder der Ihrer Gesellschaft.">
                 <TextInput value={name} onChange={setName} placeholder="z. B. Familie Berger" autoFocus />
@@ -366,7 +366,7 @@ function Onboarding() {
             </div>
           ) : (
             <div key="b" className="rise">
-              <h2 className="display text-[36px]">Womit beginnen?</h2>
+              <h2 className="display text-[30px]">Womit beginnen?</h2>
               <p className="mb-6 mt-2 text-text-2">Sie können jederzeit wechseln: Das Beispiel lässt sich in den Einstellungen wieder entfernen.</p>
               <button onClick={() => setForm(true)} className="card group mb-3 flex w-full items-center gap-4 p-5 text-left transition-colors hover:border-accent-line">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"><Building2 size={20} /></span>

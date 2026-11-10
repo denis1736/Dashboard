@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
-@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource-variable/manrope";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
@@ -91,7 +91,7 @@
 
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --font-display: "Manrope Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -161,7 +161,7 @@
     color: var(--muted);
   }
   .tnum { font-variant-numeric: tabular-nums; }
-  .display { font-family: var(--font-serif); font-weight: 400; letter-spacing: -0.01em; line-height: 1.05; }
+  .display { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.035em; line-height: 1.1; }
   .rule-gold { height: 1px; background: linear-gradient(90deg, var(--accent), transparent); opacity: 0.55; }
 
   .field {

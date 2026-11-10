@@ -55,7 +55,7 @@ export default function ObjektDetail() {
       <Link href="/objekte" className="mb-4 inline-flex items-center gap-1 text-[13px] text-muted hover:text-text"><ChevronLeft size={15} />Objekte</Link>
       <div className="rise mb-6 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="display text-[32px] sm:text-[40px]">{p.name}</h1>
+          <h1 className="display text-[28px] sm:text-[34px]">{p.name}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-text-2">
             <span>{[p.street, `${p.zip} ${p.city}`.trim()].filter(Boolean).join(", ")}</span>
             <Badge>{PROPERTY_TYPE_LABEL[p.type]}</Badge>

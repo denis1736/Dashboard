@@ -172,7 +172,7 @@ export default function Dashboard() {
       <div className="rise mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">{new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
-          <h1 className="display text-[34px] sm:text-[42px]">{greeting()}{pf.settings.ownerName && pf.settings.ownerName !== "Beispielportfolio" ? `, ${pf.settings.ownerName}` : ""}.</h1>
+          <h1 className="display text-[28px] sm:text-[36px]">{greeting()}{pf.settings.ownerName && pf.settings.ownerName !== "Beispielportfolio" ? `, ${pf.settings.ownerName}` : ""}.</h1>
         </div>
         <div className="flex gap-2">
           <Button icon={<SlidersHorizontal size={15} />} onClick={() => setCustomize(true)}>Anpassen</Button>

@@ -33,7 +33,7 @@ export default function Berichte() {
         {reports.map((r, i) => (
           <section key={r.kind} className={`card rise rise-${Math.min(i + 1, 5)} flex flex-col p-6`}>
             <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-accent"><r.icon size={20} strokeWidth={1.75} /></div>
-            <h2 className="display text-[26px]">{r.title}</h2>
+            <h2 className="display text-[22px]">{r.title}</h2>
             <p className="mt-1 text-text-2">{r.text}</p>
             <ul className="my-4 flex-1 space-y-1.5 text-[13px] text-text-2">
               {r.contents.map((c) => <li key={c} className="flex gap-2.5"><span className="mt-[8px] h-1 w-1 shrink-0 rounded-full bg-accent" />{c}</li>)}

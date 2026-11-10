@@ -6,7 +6,7 @@ import { axisCompact } from "@/lib/format";
 /**
  * Bausteine der Berichte. Ein Erscheinungsbild für alle Dokumente: dunkles
  * Deckblatt mit Goldlinie, danach helle Seiten mit Kopf- und Fußzeile,
- * Serifenschrift für Titel, Inter für Text und Zahlen.
+ * Manrope für Titel, Inter für Text und Zahlen.
  */
 
 export const C = {
@@ -36,7 +36,10 @@ export function registerFonts(base = "/fonts"): void {
     family: "Inter",
     fonts: [400, 500, 600, 700].map((w) => ({ src: `${base}/inter-latin-${w}-normal.woff`, fontWeight: w })),
   });
-  Font.register({ family: "Serif", src: `${base}/instrument-serif-latin-400-normal.woff` });
+  Font.register({
+    family: "Display",
+    fonts: [500, 600].map((w) => ({ src: `${base}/manrope-latin-${w}-normal.woff`, fontWeight: w })),
+  });
   // Keine Silbentrennung: Zahlen und Fachbegriffe bleiben ganz.
   Font.registerHyphenationCallback((word) => [word]);
 }
@@ -48,10 +51,10 @@ const s = StyleSheet.create({
   page: { paddingTop: 74, paddingBottom: 60, paddingHorizontal: PAD, fontFamily: "Inter", fontSize: 9, color: C.text, lineHeight: 1.45 },
   header: { position: "absolute", top: 30, left: PAD, right: PAD, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 9, borderBottomWidth: 0.6, borderBottomColor: C.line },
   footer: { position: "absolute", bottom: 26, left: PAD, right: PAD, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: C.muted, paddingTop: 8, borderTopWidth: 0.6, borderTopColor: C.line },
-  brand: { fontFamily: "Serif", fontSize: 13, color: C.ink },
+  brand: { fontFamily: "Display", fontWeight: 600, fontSize: 11, letterSpacing: -0.3, color: C.ink },
   eyebrow: { fontSize: 7, letterSpacing: 1.1, textTransform: "uppercase", color: C.muted, fontWeight: 600 },
-  h1: { fontFamily: "Serif", fontSize: 24, color: C.ink, lineHeight: 1.1, marginBottom: 4 },
-  h2: { fontFamily: "Serif", fontSize: 15, color: C.ink, lineHeight: 1.15, marginTop: 18, marginBottom: 8 },
+  h1: { fontFamily: "Display", fontWeight: 500, fontSize: 20, letterSpacing: -0.6, color: C.ink, lineHeight: 1.15, marginBottom: 5 },
+  h2: { fontFamily: "Display", fontWeight: 600, fontSize: 11.5, letterSpacing: -0.2, color: C.ink, lineHeight: 1.2, marginTop: 18, marginBottom: 8 },
   rule: { height: 1, width: 36, backgroundColor: C.gold, marginBottom: 12, marginTop: 2 },
   kpi: { paddingVertical: 9, paddingRight: 8 },
   kpiValue: { fontSize: 14, fontWeight: 600, color: C.ink, marginTop: 3, lineHeight: 1.25 },
@@ -83,11 +86,11 @@ export function Cover({ meta, facts }: { meta: DocMeta; facts: { label: string; 
     <Page size="A4" style={{ backgroundColor: C.night, color: "#f3eee4", fontFamily: "Inter", padding: 54 }}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Mark size={22} color={C.goldLight} />
-        <Text style={{ fontFamily: "Serif", fontSize: 19, marginLeft: 9, color: "#f3eee4" }}>Aureum</Text>
+        <Text style={{ fontFamily: "Display", fontWeight: 600, fontSize: 16, letterSpacing: -0.5, marginLeft: 9, color: "#f3eee4" }}>Aureum</Text>
       </View>
       <View style={{ marginTop: 210 }}>
         <Text style={{ fontSize: 8, letterSpacing: 1.6, textTransform: "uppercase", color: C.goldLight, fontWeight: 600 }}>{meta.subtitle}</Text>
-        <Text style={{ fontFamily: "Serif", fontSize: 46, lineHeight: 1.05, marginTop: 14, color: "#f8f4ea" }}>{meta.title}</Text>
+        <Text style={{ fontFamily: "Display", fontWeight: 500, fontSize: 38, letterSpacing: -1.4, lineHeight: 1.08, marginTop: 14, color: "#f8f4ea" }}>{meta.title}</Text>
         <View style={{ height: 1, width: 64, backgroundColor: C.goldLight, marginTop: 26, marginBottom: 26 }} />
         {meta.owner ? <Text style={{ fontSize: 11, color: "#d9d2c3" }}>{meta.owner}</Text> : null}
         <Text style={{ fontSize: 9.5, color: "#958d7d", marginTop: 4 }}>Stichtag {meta.date}</Text>

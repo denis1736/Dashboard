@@ -117,7 +117,7 @@ export default function Berater() {
         <PageHeader title="Berater" sub="Stellen Sie Fragen zu Ihrem Bestand in normaler Sprache." />
         <div className="card rise rise-1 mx-auto max-w-[680px] p-7 sm:p-9">
           <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent"><ShieldCheck size={22} /></div>
-          <h2 className="display text-[28px]">Bevor es losgeht: Ihre Daten, Ihre Entscheidung</h2>
+          <h2 className="display text-[24px]">Bevor es losgeht: Ihre Daten, Ihre Entscheidung</h2>
           <p className="mt-3 text-text-2">Der Berater nutzt ein Sprachmodell des Anbieters Groq (Server in den USA). Damit er mit Ihren Zahlen rechnen kann, wird bei jeder Frage ein Auszug Ihres Bestands mitgesendet.</p>
           <ul className="my-5 space-y-2.5 text-[14px]">
             {[
@@ -144,7 +144,7 @@ export default function Berater() {
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-180px)] max-w-[860px] flex-col lg:min-h-[calc(100dvh-110px)]">
       <div className="rise mb-4 flex flex-wrap items-end justify-between gap-3">
-        <h1 className="display text-[34px] sm:text-[40px]">Berater</h1>
+        <h1 className="display text-[28px] sm:text-[34px]">Berater</h1>
         <div className="flex items-center gap-2">
           <button onClick={() => setWithData((v) => !v)} aria-pressed={withData}
             title={withData ? `Bestandsdaten werden mitgesendet (ca. ${estimateTokens(context).toLocaleString("de-DE")} Tokens je Frage)` : "Bestandsdaten werden nicht mitgesendet"}
@@ -160,7 +160,7 @@ export default function Berater() {
         {messages.length === 0 ? (
           <div className="rise rise-1 pt-6">
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent"><Sparkles size={22} /></div>
-            <h2 className="display text-[28px]">Was möchten Sie wissen?</h2>
+            <h2 className="display text-[24px]">Was möchten Sie wissen?</h2>
             <p className="mb-6 mt-1 max-w-[58ch] text-text-2">Der Berater rechnet mit Ihren echten Zahlen, erklärt Zusammenhänge und entwirft Schreiben. Bei Standortfragen arbeitet er ohne Live-Marktdaten und kennzeichnet Schätzungen.</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {prompts.map((p) => (
