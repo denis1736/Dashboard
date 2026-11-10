@@ -7,7 +7,7 @@ import { demoPortfolio } from "./demo";
 import { todayISO } from "./calc/dates";
 import {
   DEFAULT_SETTINGS, EMPTY_PORTFOLIO,
-  type Expense, type Lease, type Loan, type Payment, type Portfolio, type Property, type Reminder, type Settings, type Unit,
+  type Billing, type Expense, type Lease, type Loan, type Payment, type Portfolio, type Property, type Reminder, type Settings, type Unit,
 } from "./types";
 
 /**
@@ -24,7 +24,7 @@ const UI_KEY = "aureum:ui";
 type Status = "laden" | "gesperrt" | "bereit";
 type Collections = {
   properties: Property; units: Unit; leases: Lease; loans: Loan;
-  expenses: Expense; payments: Payment; reminders: Reminder;
+  expenses: Expense; payments: Payment; reminders: Reminder; billings: Billing;
 };
 
 interface State {
@@ -48,12 +48,16 @@ interface State {
 let key: CryptoKey | null = null;
 let salt: string | null = null;
 let pending: Envelope | null = null;
-let timer: ReturnType<typeof setTimeout> | null = null;
 
 const normalize = (pf: Portfolio): Portfolio => ({
   ...EMPTY_PORTFOLIO,
   ...pf,
-  settings: { ...DEFAULT_SETTINGS, ...pf.settings, ai: { ...DEFAULT_SETTINGS.ai, ...pf.settings?.ai } },
+  settings: {
+    ...DEFAULT_SETTINGS,
+    ...pf.settings,
+    ai: { ...DEFAULT_SETTINGS.ai, ...pf.settings?.ai },
+    sender: { ...DEFAULT_SETTINGS.sender, ...pf.settings?.sender },
+  },
 });
 
 const mirrorUi = (s: Settings) => {
@@ -73,19 +77,32 @@ export function applyUi(s: Pick<Settings, "theme" | "accent" | "density">) {
 }
 
 export const useStore = create<State>((set, get) => {
-  const persist = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const env = await seal(get().pf, key, salt);
-      await idbSet(KEY, env);
+  // Sofort schreiben, damit eine Änderung auch dann erhalten bleibt, wenn die Seite direkt danach
+  // geschlossen oder neu geladen wird. Folgen während des Schreibens weitere Änderungen (Tippen),
+  // wird danach genau einmal mit dem neuesten Stand nachgeschrieben.
+  let writing = false;
+  let dirty = false;
+  const persist = async () => {
+    if (writing) {
+      dirty = true;
+      return;
+    }
+    writing = true;
+    try {
+      do {
+        dirty = false;
+        await idbSet(KEY, await seal(get().pf, key, salt));
+      } while (dirty);
       set({ savedAt: Date.now() });
-    }, 250);
+    } finally {
+      writing = false;
+    }
   };
 
   const commit = (pf: Portfolio) => {
     set({ pf });
     mirrorUi(pf.settings);
-    persist();
+    void persist();
   };
 
   return {
@@ -163,6 +180,7 @@ export const useStore = create<State>((set, get) => {
           loans: next.loans.filter((l) => l.propertyId !== id),
           expenses: next.expenses.filter((e) => e.propertyId !== id),
           reminders: next.reminders.filter((r) => r.propertyId !== id),
+          billings: next.billings.filter((b) => b.propertyId !== id),
         };
       }
       const unitIds = new Set(next.units.map((u) => u.id));
@@ -182,7 +200,7 @@ export const useStore = create<State>((set, get) => {
     loadDemo: () => {
       const s = get().pf.settings;
       const demo = demoPortfolio(todayISO());
-      commit({ ...demo, settings: { ...demo.settings, theme: s.theme, accent: s.accent, density: s.density, ai: s.ai } });
+      commit({ ...demo, settings: { ...demo.settings, theme: s.theme, accent: s.accent, density: s.density, ai: s.ai, sender: s.sender.name ? s.sender : demo.settings.sender } });
     },
 
     reset: async () => {

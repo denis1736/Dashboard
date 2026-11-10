@@ -148,6 +148,23 @@ export function demoPortfolio(today: string): Portfolio {
       { id: "e6", propertyId: "ham", date: "2026-06-18", category: "reparatur", amount: 2_950, deductible: true, note: "Terrassentür und Rollladen" },
     ],
     payments: [],
+    billings: [
+      {
+        id: "b-lpz-2025", propertyId: "lpz", year: 2025, prepaid: {}, adjustPrepayment: true,
+        items: [
+          { id: "c1", category: "grundsteuer", label: "", amount: 1_480, key: "flaeche", shares: {}, labor35a: 0 },
+          { id: "c2", category: "wasser", label: "", amount: 2_310, key: "personen", shares: { "lpz-u1": 1, "lpz-u2": 3, "lpz-u3": 1, "lpz-u4": 2, "lpz-u5": 4, "lpz-u6": 1 }, labor35a: 0 },
+          { id: "c3", category: "entwaesserung", label: "", amount: 1_720, key: "personen", shares: { "lpz-u1": 1, "lpz-u2": 3, "lpz-u3": 1, "lpz-u4": 2, "lpz-u5": 4, "lpz-u6": 1 }, labor35a: 0 },
+          { id: "c4", category: "heizung", label: "laut Messdienst", amount: 4_860, key: "direkt", shares: { "lpz-u1": 640, "lpz-u2": 760, "lpz-u3": 690, "lpz-u4": 930, "lpz-u5": 1_180, "lpz-u6": 660 }, labor35a: 0 },
+          { id: "c5", category: "muell", label: "", amount: 1_150, key: "einheiten", shares: {}, labor35a: 0 },
+          { id: "c6", category: "reinigung", label: "Treppenhaus", amount: 980, key: "flaeche", shares: {}, labor35a: 980 },
+          { id: "c7", category: "versicherung", label: "Wohngebäude und Haftpflicht", amount: 1_640, key: "flaeche", shares: {}, labor35a: 0 },
+          { id: "c8", category: "beleuchtung", label: "", amount: 420, key: "flaeche", shares: {}, labor35a: 0 },
+          { id: "c9", category: "hauswart", label: "", amount: 1_260, key: "flaeche", shares: {}, labor35a: 1_100 },
+          { id: "c10", category: "schornstein", label: "", amount: 180, key: "einheiten", shares: {}, labor35a: 120 },
+        ],
+      },
+    ],
     reminders: [
       { id: "r1", propertyId: "lpz", title: "Heizungswartung", date: "2026-11-24", kind: "wartung", repeatMonths: 12, done: false, note: "Fa. Thermo-Service" },
       { id: "r2", propertyId: "dor", title: "Legionellenprüfung Trinkwasser", date: "2027-01-18", kind: "wartung", repeatMonths: 36, done: false },
@@ -157,7 +174,10 @@ export function demoPortfolio(today: string): Portfolio {
       { id: "r6", propertyId: "ham", title: "Schornsteinfeger: Feuerstättenschau", date: "2027-05-12", kind: "wartung", repeatMonths: 42, done: false },
       { id: "r7", title: "Steuererklärung: Anlage V zusammenstellen", date: "2027-02-15", kind: "sonstiges", repeatMonths: 12, done: false },
     ],
-    settings: { ...DEFAULT_SETTINGS, ownerName: "Beispielportfolio", onboarded: true },
+    settings: {
+      ...DEFAULT_SETTINGS, ownerName: "Beispielportfolio", onboarded: true,
+      sender: { name: "Martina Berger", street: "Lindenallee 14", zipCity: "04109 Leipzig", email: "verwaltung@example.org", phone: "0341 5550123", iban: "DE02 1203 0000 0000 2020 51", bank: "Beispielbank" },
+    },
   };
 
   // Zahlungseingänge der letzten sechs Monate; im laufenden Monat bleiben einige offen.

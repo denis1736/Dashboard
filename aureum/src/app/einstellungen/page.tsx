@@ -76,6 +76,19 @@ export default function Einstellungen() {
           </div>
         </Card>
 
+        <Card className="rise rise-1 lg:col-span-2" title="Absender für Schreiben">
+          <p className="mb-4 text-text-2">Erscheint im Briefkopf von Nebenkostenabrechnungen, Mieterhöhungen und Mahnungen. Die Bankverbindung wird für Nachzahlungen genannt.</p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Name oder Firma"><TextInput value={s.sender.name} onChange={(name) => setSettings({ sender: { ...s.sender, name } })} /></Field>
+            <Field label="Straße und Hausnummer"><TextInput value={s.sender.street} onChange={(street) => setSettings({ sender: { ...s.sender, street } })} /></Field>
+            <Field label="PLZ und Ort"><TextInput value={s.sender.zipCity} onChange={(zipCity) => setSettings({ sender: { ...s.sender, zipCity } })} /></Field>
+            <Field label="E-Mail"><TextInput type="email" value={s.sender.email} onChange={(email) => setSettings({ sender: { ...s.sender, email } })} /></Field>
+            <Field label="Telefon"><TextInput type="tel" value={s.sender.phone} onChange={(phone) => setSettings({ sender: { ...s.sender, phone } })} /></Field>
+            <Field label="IBAN"><TextInput value={s.sender.iban} onChange={(iban) => setSettings({ sender: { ...s.sender, iban } })} /></Field>
+            <Field label="Bank"><TextInput value={s.sender.bank} onChange={(bank) => setSettings({ sender: { ...s.sender, bank } })} /></Field>
+          </div>
+        </Card>
+
         <Card className="rise rise-1" title="Darstellung">
           <div className="space-y-5">
             <div><div className="mb-2 text-[12px] font-medium text-text-2">Farbschema</div><Segmented label="Farbschema" value={s.theme} onChange={(theme) => setSettings({ theme })} options={[{ value: "system", label: "Automatisch" }, { value: "hell", label: "Hell" }, { value: "dunkel", label: "Dunkel" }]} /></div>

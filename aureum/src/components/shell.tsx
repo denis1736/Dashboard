@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as RD } from "radix-ui";
 import {
-  Building2, CalendarClock, ChartNoAxesCombined, FileText, FlaskConical, Landmark, LayoutDashboard, Lock, Moon,
+  Building2, Calculator, CalendarClock, ChartNoAxesCombined, Mail, FileText, FlaskConical, Landmark, LayoutDashboard, Lock, Moon,
   Ellipsis, Receipt, Search, Settings as SettingsIcon, ShieldCheck, Sparkles, Sun, Wallet, ArrowRight, type LucideIcon,
 } from "lucide-react";
 import { applyUi, useStore } from "@/lib/store";
@@ -20,11 +20,13 @@ export const NAV: NavItem[] = [
   { href: "/objekte", label: "Objekte", icon: Building2, group: "Bestand" },
   { href: "/mieten", label: "Mieteingänge", icon: Wallet, group: "Bestand" },
   { href: "/fristen", label: "Fristen", icon: CalendarClock, group: "Bestand" },
+  { href: "/nebenkosten", label: "Nebenkosten", icon: Calculator, group: "Bestand" },
   { href: "/finanzierung", label: "Finanzierung", icon: Landmark, group: "Finanzen" },
   { href: "/kennzahlen", label: "Kennzahlen", icon: ChartNoAxesCombined, group: "Finanzen" },
   { href: "/szenarien", label: "Szenarien", icon: FlaskConical, group: "Finanzen" },
   { href: "/steuern", label: "Steuern", icon: Receipt, group: "Finanzen" },
   { href: "/berater", label: "Berater", icon: Sparkles, group: "Werkzeuge" },
+  { href: "/schreiben", label: "Schreiben", icon: Mail, group: "Werkzeuge" },
   { href: "/berichte", label: "Berichte", icon: FileText, group: "Werkzeuge" },
 ];
 
@@ -130,7 +132,7 @@ function Sidebar({ onSearch }: { onSearch: () => void }) {
 function MobileBars({ onSearch }: { onSearch: () => void }) {
   const path = usePathname();
   const [more, setMore] = useState(false);
-  const primary = [NAV[0], NAV[1], NAV[4], NAV[3]];
+  const primary = ["/", "/objekte", "/finanzierung", "/fristen"].map((h) => NAV.find((n) => n.href === h)!);
   useEffect(() => setMore(false), [path]);
   return (
     <>

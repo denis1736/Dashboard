@@ -1,5 +1,5 @@
 import type { ISODate, Portfolio, ReminderKind } from "../types";
-import { addMonths, addYears, daysBetween } from "./dates";
+import { addMonths, addYears, daysBetween, yearOf } from "./dates";
 import { loanStatus } from "./loans";
 import { currentColdRent, isLeaseActive, propertyMetrics, unitState } from "./metrics";
 
@@ -23,6 +23,7 @@ export const DEADLINE_KIND_LABEL: Record<ReminderKind, string> = {
   vertragsende: "Vertragsende",
   wartung: "Wartung",
   versicherung: "Versicherung",
+  abrechnung: "Nebenkostenabrechnung",
   sonstiges: "Termin",
 };
 
@@ -135,6 +136,24 @@ export function deadlines(pf: Portfolio, asOf: ISODate, horizonDays: number): De
           });
         }
       }
+    }
+  }
+
+  // § 556 Abs. 3 BGB: Die Abrechnung muss dem Mieter binnen zwölf Monaten nach Ende des Jahres zugehen.
+  const billYear = yearOf(asOf) - 1;
+  for (const p of pf.properties) {
+    const unitIds = pf.units.filter((u) => u.propertyId === p.id).map((u) => u.id);
+    const hadTenants = pf.leases.some((l) => unitIds.includes(l.unitId) && l.prepayment > 0 && l.start <= `${billYear}-12-31` && (!l.end || l.end >= `${billYear}-01-01`));
+    const issued = pf.billings.some((b) => b.propertyId === p.id && b.year === billYear && b.issuedAt);
+    if (hadTenants && !issued) {
+      push({
+        id: `nk-${p.id}-${billYear}`,
+        date: `${billYear + 1}-12-31`,
+        kind: "abrechnung",
+        title: `Nebenkostenabrechnung ${billYear} zustellen · ${p.name}`,
+        detail: "Geht die Abrechnung später zu, sind Nachforderungen ausgeschlossen (§ 556 Abs. 3 BGB)",
+        propertyId: p.id,
+      });
     }
   }
 

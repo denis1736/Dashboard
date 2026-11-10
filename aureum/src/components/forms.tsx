@@ -42,7 +42,7 @@ const DateInput = ({ value, onChange }: { value: string; onChange: (v: string) =
 );
 
 /** Löschen mit Rückfrage im selben Knopf: kein zweiter Dialog, aber kein versehentlicher Klick. */
-function DeleteButton({ onDelete, what }: { onDelete: () => void; what: string }) {
+export function DeleteButton({ onDelete, what, size }: { onDelete: () => void; what: string; size?: "sm" | "md" }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
@@ -50,7 +50,7 @@ function DeleteButton({ onDelete, what }: { onDelete: () => void; what: string }
     return () => clearTimeout(t);
   }, [armed]);
   return (
-    <Button variant="danger" className="mr-auto" icon={<Trash2 size={15} />} onClick={() => (armed ? onDelete() : setArmed(true))}>
+    <Button variant="danger" size={size} className="mr-auto" icon={<Trash2 size={15} />} onClick={() => (armed ? onDelete() : setArmed(true))}>
       {armed ? `${what} wirklich löschen?` : "Löschen"}
     </Button>
   );

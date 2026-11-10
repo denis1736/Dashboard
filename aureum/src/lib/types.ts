@@ -177,6 +177,7 @@ export type ReminderKind =
   | "vertragsende"
   | "wartung"
   | "versicherung"
+  | "abrechnung"
   | "sonstiges";
 
 export interface Reminder {
@@ -189,6 +190,76 @@ export interface Reminder {
   repeatMonths: number;
   done: boolean;
   note?: string;
+}
+
+/** Umlageschlüssel einer Betriebskostenposition. */
+export type AllocationKey = "flaeche" | "einheiten" | "personen" | "verbrauch" | "direkt";
+
+export const ALLOCATION_LABEL: Record<AllocationKey, string> = {
+  flaeche: "Wohnfläche",
+  einheiten: "Wohneinheiten",
+  personen: "Personen",
+  verbrauch: "Verbrauch",
+  direkt: "Direkte Zuordnung",
+};
+
+/** Betriebskostenarten nach § 2 BetrKV. */
+export const BETRKV: { key: string; nr: string; label: string }[] = [
+  { key: "grundsteuer", nr: "1", label: "Grundsteuer" },
+  { key: "wasser", nr: "2", label: "Wasserversorgung" },
+  { key: "entwaesserung", nr: "3", label: "Entwässerung" },
+  { key: "heizung", nr: "4", label: "Heizung" },
+  { key: "warmwasser", nr: "5", label: "Warmwasser" },
+  { key: "aufzug", nr: "7", label: "Aufzug" },
+  { key: "muell", nr: "8", label: "Straßenreinigung und Müllbeseitigung" },
+  { key: "reinigung", nr: "9", label: "Gebäudereinigung und Ungezieferbekämpfung" },
+  { key: "garten", nr: "10", label: "Gartenpflege" },
+  { key: "beleuchtung", nr: "11", label: "Beleuchtung (Allgemeinstrom)" },
+  { key: "schornstein", nr: "12", label: "Schornsteinreinigung" },
+  { key: "versicherung", nr: "13", label: "Sach- und Haftpflichtversicherung" },
+  { key: "hauswart", nr: "14", label: "Hauswart" },
+  { key: "antenne", nr: "15", label: "Gemeinschaftsantenne / Breitband (nur Betrieb)" },
+  { key: "waesche", nr: "16", label: "Einrichtungen für die Wäschepflege" },
+  { key: "sonstige", nr: "17", label: "Sonstige Betriebskosten (nur soweit vereinbart)" },
+];
+
+export interface CostItem {
+  id: ID;
+  category: string;
+  /** Freie Ergänzung, z. B. der Dienstleister. */
+  label: string;
+  /** Gesamtkosten des Objekts im Abrechnungsjahr. */
+  amount: number;
+  key: AllocationKey;
+  /** Werte je Einheit für Personen, Verbrauch oder direkte Zuordnung (Einheit -> Wert). */
+  shares: Record<ID, number>;
+  /** Darin enthaltene Arbeitskosten für haushaltsnahe Dienstleistungen (§ 35a EStG). */
+  labor35a: number;
+}
+
+/** Betriebskostenabrechnung eines Objekts für ein Kalenderjahr. */
+export interface Billing {
+  id: ID;
+  propertyId: ID;
+  year: number;
+  items: CostItem[];
+  /** Tatsächlich geleistete Vorauszahlungen je Mietvertrag; fehlt der Eintrag, gilt das vertragliche Soll. */
+  prepaid: Record<ID, number>;
+  /** Vorauszahlung im Schreiben an den Abrechnungsbetrag anpassen (§ 560 Abs. 4 BGB). */
+  adjustPrepayment: boolean;
+  /** Tag der Zustellung; damit gilt die Abrechnungsfrist als gewahrt. */
+  issuedAt?: ISODate;
+}
+
+/** Absender für Schreiben und Abrechnungen. */
+export interface Sender {
+  name: string;
+  street: string;
+  zipCity: string;
+  email: string;
+  phone: string;
+  iban: string;
+  bank: string;
 }
 
 export type AccentKey = "gold" | "champagner" | "bronze" | "smaragd" | "saphir";
@@ -205,6 +276,7 @@ export interface Settings {
   ai: { consent: boolean; includeTenantNames: boolean };
   /** Überschriebene Indexwerte (Jahr -> Index, 2015 = 100). */
   indexOverrides: Record<string, number>;
+  sender: Sender;
   onboarded: boolean;
 }
 
@@ -217,6 +289,7 @@ export interface Portfolio {
   expenses: Expense[];
   payments: Payment[];
   reminders: Reminder[];
+  billings: Billing[];
   settings: Settings;
 }
 
@@ -239,6 +312,7 @@ export const DEFAULT_SETTINGS: Settings = {
   widgets: DEFAULT_WIDGETS,
   ai: { consent: false, includeTenantNames: false },
   indexOverrides: {},
+  sender: { name: "", street: "", zipCity: "", email: "", phone: "", iban: "", bank: "" },
   onboarded: false,
 };
 
@@ -251,5 +325,6 @@ export const EMPTY_PORTFOLIO: Portfolio = {
   expenses: [],
   payments: [],
   reminders: [],
+  billings: [],
   settings: DEFAULT_SETTINGS,
 };

@@ -5,6 +5,7 @@ import type { ReportKind, ReportOptions } from "@/lib/report";
 import { yearOf } from "@/lib/calc/dates";
 import { registerFonts } from "./kit";
 import { CashflowReport, LoanReport, MemoReport, PortfolioReport, PropertyReport, TaxReport } from "./reports";
+import { BillingDoc, DunningDoc, IncreaseDoc } from "./letters";
 
 const slug = (s: string) => s.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -24,6 +25,23 @@ export function buildReport(kind: ReportKind, pf: Portfolio, today: string, opts
     case "steuer": {
       const year = opts.year ?? yearOf(today) - 1;
       return { doc: <TaxReport pf={pf} today={today} year={year} />, filename: `aureum-anlage-v-${year}.pdf` };
+    }
+    case "nebenkosten": {
+      const b = pf.billings.find((x) => x.id === opts.billingId);
+      if (!b) throw new Error("Abrechnung nicht gefunden.");
+      const name = slug(pf.properties.find((p) => p.id === b.propertyId)?.name ?? "objekt");
+      const who = opts.leaseId ? `-${slug(pf.leases.find((l) => l.id === opts.leaseId)?.tenantName ?? "")}` : "";
+      return { doc: <BillingDoc pf={pf} today={today} billingId={b.id} leaseId={opts.leaseId} />, filename: `nebenkostenabrechnung-${b.year}-${name}${who}.pdf` };
+    }
+    case "mieterhoehung": {
+      if (!opts.increase) throw new Error("Angaben zur Mieterhöhung fehlen.");
+      const who = slug(pf.leases.find((l) => l.id === opts.increase!.leaseId)?.tenantName ?? "");
+      return { doc: <IncreaseDoc pf={pf} today={today} data={opts.increase} />, filename: `mieterhoehung-${who}-${opts.increase.letterDate}.pdf` };
+    }
+    case "mahnung": {
+      if (!opts.dunning) throw new Error("Angaben zur Mahnung fehlen.");
+      const who = slug(pf.leases.find((l) => l.id === opts.dunning!.leaseId)?.tenantName ?? "");
+      return { doc: <DunningDoc pf={pf} today={today} data={opts.dunning} />, filename: `${["zahlungserinnerung", "mahnung", "letzte-mahnung"][opts.dunning.level - 1]}-${who}-${opts.dunning.letterDate}.pdf` };
     }
     case "memo":
       return { doc: <MemoReport pf={pf} today={today} title={opts.title ?? "Auswertung"} body={opts.body ?? ""} />, filename: `aureum-auswertung-${today}.pdf` };

@@ -289,3 +289,146 @@ describe("Datum", () => {
     expect(daysBetween("2026-11-10", "2026-12-14")).toBe(34);
   });
 });
+
+import { billingWarnings, statements } from "@/lib/calc/billing";
+import { arrears, rentIncrease } from "@/lib/calc/letters";
+import type { Billing, Lease, Portfolio, Unit } from "@/lib/types";
+import { EMPTY_PORTFOLIO } from "@/lib/types";
+
+describe("Betriebskostenabrechnung", () => {
+  const units: Unit[] = [
+    { id: "a", propertyId: "p", name: "A", area: 60, rooms: 2, status: "vermietet", marketRent: 600 },
+    { id: "b", propertyId: "p", name: "B", area: 40, rooms: 1, status: "vermietet", marketRent: 400 },
+  ];
+  const lease = (o: Partial<Lease>): Lease => ({ id: "l", unitId: "a", tenantName: "T", start: "2020-01-01", coldRent: 600, prepayment: 100, deposit: 0, rentType: "standard", steps: [], ...o });
+  const billing: Billing = {
+    id: "bill", propertyId: "p", year: 2025, prepaid: {}, adjustPrepayment: false,
+    items: [
+      { id: "1", category: "grundsteuer", label: "", amount: 1_000, key: "flaeche", shares: {}, labor35a: 0 },
+      { id: "2", category: "muell", label: "", amount: 600, key: "einheiten", shares: {}, labor35a: 0 },
+      { id: "3", category: "wasser", label: "", amount: 900, key: "personen", shares: { a: 2, b: 1 }, labor35a: 0 },
+      { id: "4", category: "heizung", label: "", amount: 1_500, key: "direkt", shares: { a: 900, b: 600 }, labor35a: 0 },
+      { id: "5", category: "hauswart", label: "", amount: 500, key: "flaeche", shares: {}, labor35a: 400 },
+    ],
+  };
+  const pf = (leases: Lease[]): Portfolio => ({ ...EMPTY_PORTFOLIO, properties: [prop()], units, leases });
+
+  it("verteilt nach Fläche, Einheiten, Personen und direkter Zuordnung", () => {
+    const [s] = statements(billing, pf([lease({})]));
+    expect(s.days).toBe(365);
+    // 1.000 × 60/100, 600 / 2, 900 × 2/3, 900 direkt, 500 × 60/100
+    expect(s.lines.map((l) => l.amount)).toEqual([600, 300, 600, 900, 300]);
+    expect(s.costs).toBe(2_700);
+    expect(s.prepaidDue).toBe(1_200);
+    expect(s.balance).toBe(1_500);
+    expect(s.labor35a).toBe(240); // 400 × 300/500
+    expect(s.suggestedPrepayment).toBe(225);
+  });
+
+  it("rechnet bei Einzug im Jahr zeitanteilig und lässt Leerstand beim Eigentümer", () => {
+    const all = statements(billing, pf([lease({ start: "2025-07-01" })]));
+    expect(all).toHaveLength(1);
+    const s = all[0];
+    expect(s.days).toBe(184);
+    expect(s.lines[0].amount).toBeCloseTo((600 * 184) / 365, 2);
+    expect(s.prepaidDue).toBe(600);
+    // Wohnung B steht leer: Ihr Anteil taucht in keiner Mieterabrechnung auf.
+    expect(s.costs).toBeLessThan(2_700);
+  });
+
+  it("teilt die Kosten einer Wohnung bei Mieterwechsel ohne Lücke und ohne Doppelung", () => {
+    const all = statements(billing, pf([lease({ id: "alt", end: "2025-03-31" }), lease({ id: "neu", start: "2025-04-01" })]));
+    expect(all.map((s) => s.days)).toEqual([90, 275]);
+    expect(all[0].costs + all[1].costs).toBeCloseTo(2_700, 1);
+  });
+
+  it("setzt erfasste Ist-Vorauszahlungen an und ignoriert Verträge außerhalb des Jahres", () => {
+    const b = { ...billing, prepaid: { l: 1_000 } };
+    expect(statements(b, pf([lease({})]))[0].balance).toBe(1_700);
+    expect(statements(billing, pf([lease({ start: "2026-02-01" })]))).toHaveLength(0);
+    expect(statements(billing, pf([lease({ end: "2024-12-31" })]))).toHaveLength(0);
+  });
+
+  it("warnt vor typischen Fehlern", () => {
+    const bad: Billing = { ...billing, items: [
+      { id: "1", category: "heizung", label: "", amount: 1_000, key: "flaeche", shares: {}, labor35a: 0 },
+      { id: "2", category: "wasser", label: "", amount: 500, key: "direkt", shares: { a: 100 }, labor35a: 0 },
+      { id: "3", category: "antenne", label: "", amount: 200, key: "einheiten", shares: {}, labor35a: 0 },
+    ] };
+    const w = billingWarnings(bad, pf([lease({})]), "2027-01-15");
+    expect(w.some((x) => x.includes("Heizkostenverordnung"))).toBe(true);
+    expect(w.some((x) => x.includes("weichen von den Gesamtkosten"))).toBe(true);
+    expect(w.some((x) => x.includes("Kabel-TV"))).toBe(true);
+    expect(w.some((x) => x.includes("Abrechnungsfrist ist am 31.12.2026 abgelaufen"))).toBe(true);
+    expect(billingWarnings(billing, pf([lease({})]), "2026-06-01")).toEqual([]);
+  });
+
+  it("meldet die Abrechnungsfrist, bis die Abrechnung zugestellt ist", () => {
+    const demo = demoPortfolio("2026-11-10");
+    const d = deadlines(demo, "2026-11-10", 365);
+    expect(d.find((x) => x.id === "nk-lpz-2025")?.date).toBe("2026-12-31");
+    demo.billings[0].issuedAt = "2026-11-01";
+    expect(deadlines(demo, "2026-11-10", 365).find((x) => x.id === "nk-lpz-2025")).toBeUndefined();
+    expect(deadlines(demo, "2026-11-10", 365).find((x) => x.id === "nk-dor-2025")).toBeDefined();
+  });
+});
+
+describe("Mieterhöhung nach § 558 BGB", () => {
+  const unit: Unit = { id: "a", propertyId: "p", name: "A", area: 70, rooms: 3, status: "vermietet", marketRent: 800 };
+  const lease: Lease = { id: "l", unitId: "a", tenantName: "T", start: "2018-05-01", coldRent: 600, prepayment: 150, deposit: 0, rentType: "standard", steps: [], lastIncrease: "2023-03-01" };
+  const base = { lease, unit, letterDate: "2026-11-10", marketPerSqm: 11, rentThreeYearsAgo: 600, capPct: 20 as const };
+
+  it("begrenzt auf die Kappungsgrenze, wenn sie unter der Vergleichsmiete liegt", () => {
+    const r = rentIncrease(base);
+    expect(r.maxByMarket).toBe(770);
+    expect(r.maxByCap).toBe(720);
+    expect(r.newRent).toBe(720);
+    expect(r.limitedBy).toBe("kappungsgrenze");
+    expect(r.increase).toBe(120);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("begrenzt auf die Vergleichsmiete und beachtet 15 % in angespannten Märkten", () => {
+    expect(rentIncrease({ ...base, marketPerSqm: 9.5 })).toMatchObject({ newRent: 665, limitedBy: "vergleichsmiete" });
+    expect(rentIncrease({ ...base, capPct: 15 }).newRent).toBe(690);
+    expect(rentIncrease({ ...base, requestedRent: 650 })).toMatchObject({ newRent: 650, limitedBy: "wunsch" });
+  });
+
+  it("berechnet Zustimmungsfrist und Wirksamkeit aus dem Zugangsmonat", () => {
+    const r = rentIncrease(base);
+    expect(r.consentUntil).toBe("2027-01-31");
+    expect(r.effectiveDate).toBe("2027-02-01");
+    expect(rentIncrease({ ...base, letterDate: "2026-12-05" })).toMatchObject({ consentUntil: "2027-02-28", effectiveDate: "2027-03-01" });
+  });
+
+  it("hält Jahressperrfrist und 15-Monats-Frist ein", () => {
+    const recent = { ...base, lease: { ...lease, lastIncrease: "2026-02-01" } };
+    const early = rentIncrease(recent);
+    expect(early.earliestRequest).toBe("2027-02-01");
+    expect(early.warnings.some((w) => w.includes("Jahressperrfrist"))).toBe(true);
+    // Schreiben genau nach einem Jahr: wirksam frühestens 15 Monate nach der letzten Erhöhung.
+    const ok = rentIncrease({ ...recent, letterDate: "2027-02-02" });
+    expect(ok.warnings).toEqual([]);
+    expect(ok.effectiveDate).toBe("2027-05-01");
+  });
+
+  it("schließt Staffel- und Indexmieten aus", () => {
+    expect(rentIncrease({ ...base, lease: { ...lease, rentType: "index" } }).warnings[0]).toMatch(/ausgeschlossen/);
+  });
+});
+
+describe("Zahlungsrückstände", () => {
+  it("summiert offene Monate ab Beginn der Zahlungserfassung", () => {
+    const pf = demoPortfolio("2026-11-10");
+    const list = arrears(pf, "2026-11-10");
+    const total = list.reduce((s, a) => s + a.total, 0);
+    const roll = rentRoll(pf, "2026-11", "2026-11-10");
+    const openNow = roll.reduce((s, r) => s + Math.max(0, r.due - r.paid), 0);
+    expect(total).toBeGreaterThanOrEqual(openNow);
+    expect(list[0].total).toBeGreaterThanOrEqual(list[list.length - 1].total);
+    for (const a of list) expect(a.months.every((m) => m.month >= "2026-06" && m.open > 0)).toBe(true);
+    // Vor Fälligkeit zählt der laufende Monat nicht als Rückstand.
+    expect(arrears(pf, "2026-11-03").every((a) => a.months.every((m) => m.month < "2026-11"))).toBe(true);
+    expect(arrears({ ...pf, payments: [] }, "2026-11-10")).toEqual([]);
+  });
+});
