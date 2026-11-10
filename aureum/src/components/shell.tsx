@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as RD } from "radix-ui";
 import {
   Building2, Calculator, CalendarClock, ChartNoAxesCombined, Mail, FileText, FlaskConical, Landmark, LayoutDashboard, Lock, Moon,
@@ -32,22 +32,34 @@ export const NAV: NavItem[] = [
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
 
-/** Giebel und Querbalken: zugleich Dach und der Buchstabe A. */
+/**
+ * Bildmarke „Aureus“: eine Goldmünze, aus der das A als Giebel ausgespart ist.
+ * Die Aussparung ist eine echte Maske, die Marke steht daher auf jedem Untergrund.
+ */
 export function Mark({ size = 28 }: { size?: number }) {
+  const id = useId();
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
-      <rect width="32" height="32" rx="9" style={{ fill: "var(--accent-soft)" }} />
-      <rect x="0.5" y="0.5" width="31" height="31" rx="8.5" fill="none" style={{ stroke: "var(--accent-line)" }} />
-      <path d="M8.5 23 16 8l7.5 15M11.6 17.5h8.8" fill="none" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: "var(--accent)" }} />
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden className="shrink-0">
+      <defs>
+        <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" style={{ stopColor: "var(--mark-a)" }} />
+          <stop offset="1" style={{ stopColor: "var(--mark-b)" }} />
+        </linearGradient>
+        <mask id={`${id}m`}>
+          <rect width="64" height="64" fill="#fff" />
+          <path d="M17 46.5 32 17.5l15 29M25 37.5h14" fill="none" stroke="#000" strokeWidth="6.2" strokeLinecap="round" strokeLinejoin="round" />
+        </mask>
+      </defs>
+      <circle cx="32" cy="32" r="30" fill={`url(#${id}g)`} mask={`url(#${id}m)`} />
     </svg>
   );
 }
 
-export function Wordmark() {
+export function Wordmark({ size = "md" }: { size?: "md" | "lg" }) {
   return (
-    <span className="inline-flex items-center gap-2.5">
-      <Mark />
-      <span className="display text-[22px] leading-none">Aureum</span>
+    <span className={cx("inline-flex items-center", size === "lg" ? "gap-3.5" : "gap-3")}>
+      <Mark size={size === "lg" ? 36 : 28} />
+      <span className={cx("wordmark", size === "lg" ? "text-[19px]" : "text-[15px]")}>Aureum</span>
     </span>
   );
 }
@@ -244,7 +256,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
 function Splash() {
   return (
     <div className="flex min-h-dvh items-center justify-center">
-      <div className="animate-pulse"><Wordmark /></div>
+      <div className="animate-pulse"><Wordmark size="lg" /></div>
     </div>
   );
 }
@@ -265,7 +277,7 @@ function LockScreen() {
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
       <form onSubmit={submit} className="card rise w-full max-w-[400px] p-8">
-        <Wordmark />
+        <Wordmark size="lg" />
         <div className="rule-gold my-6" />
         <h1 className="display text-[26px]">Tresor entsperren</h1>
         <p className="mb-5 mt-1.5 text-text-2">Ihr Bestand ist auf diesem Gerät verschlüsselt. Die Passphrase wird nicht gespeichert und kann nicht zurückgesetzt werden.</p>

@@ -1,4 +1,4 @@
-import { Document, Font, Page, Path, Rect, StyleSheet, Svg, Text, View, Line, Circle } from "@react-pdf/renderer";
+import { Circle, Defs, Document, Font, Line, LinearGradient, Page, Path, Rect, Stop, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
 import { niceScale } from "@/lib/scale";
 import { axisCompact } from "@/lib/format";
@@ -41,6 +41,7 @@ export function registerFonts(base = "/fonts"): void {
     fonts: [500, 600].map((w) => ({ src: `${base}/manrope-latin-${w}-normal.woff`, fontWeight: w })),
   });
   // Keine Silbentrennung: Zahlen und Fachbegriffe bleiben ganz.
+  Font.register({ family: "Wordmark", src: `${base}/outfit-latin-400-normal.woff` });
   Font.registerHyphenationCallback((word) => [word]);
 }
 
@@ -51,7 +52,7 @@ const s = StyleSheet.create({
   page: { paddingTop: 74, paddingBottom: 60, paddingHorizontal: PAD, fontFamily: "Inter", fontSize: 9, color: C.text, lineHeight: 1.45 },
   header: { position: "absolute", top: 30, left: PAD, right: PAD, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 9, borderBottomWidth: 0.6, borderBottomColor: C.line },
   footer: { position: "absolute", bottom: 26, left: PAD, right: PAD, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: C.muted, paddingTop: 8, borderTopWidth: 0.6, borderTopColor: C.line },
-  brand: { fontFamily: "Display", fontWeight: 600, fontSize: 11, letterSpacing: -0.3, color: C.ink },
+  brand: { fontFamily: "Wordmark", fontSize: 8.6, letterSpacing: 2.6, color: C.ink },
   eyebrow: { fontSize: 7, letterSpacing: 1.1, textTransform: "uppercase", color: C.muted, fontWeight: 600 },
   h1: { fontFamily: "Display", fontWeight: 500, fontSize: 20, letterSpacing: -0.6, color: C.ink, lineHeight: 1.15, marginBottom: 5 },
   h2: { fontFamily: "Display", fontWeight: 600, fontSize: 11.5, letterSpacing: -0.2, color: C.ink, lineHeight: 1.2, marginTop: 18, marginBottom: 8 },
@@ -62,11 +63,19 @@ const s = StyleSheet.create({
   td: { fontSize: 8.4, color: C.text },
 });
 
-export function Mark({ size = 16, color = C.gold }: { size?: number; color?: string }) {
+/** Bildmarke „Aureus“. `bg` ist die Farbe des Untergrunds, in der das A ausgespart erscheint. */
+export function Mark({ size = 16, dark, bg = "#ffffff" }: { size?: number; dark?: boolean; bg?: string }) {
+  const id = dark ? "markDark" : "markLight";
   return (
-    <Svg width={size} height={size} viewBox="0 0 32 32">
-      <Rect x={0.75} y={0.75} width={30.5} height={30.5} rx={8.5} stroke={color} strokeWidth={1.2} fill="none" />
-      <Path d="M8.5 23 L16 8 L23.5 23 M11.6 17.5 H20.4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={dark ? "#f0d79d" : "#b08a2e"} />
+          <Stop offset="1" stopColor={dark ? "#c2913a" : "#7d5f16"} />
+        </LinearGradient>
+      </Defs>
+      <Circle cx={32} cy={32} r={30} fill={`url(#${id})`} />
+      <Path d="M17 46.5 L32 17.5 L47 46.5 M25 37.5 H39" stroke={bg} strokeWidth={6.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
     </Svg>
   );
 }
@@ -85,8 +94,8 @@ export function Cover({ meta, facts }: { meta: DocMeta; facts: { label: string; 
   return (
     <Page size="A4" style={{ backgroundColor: C.night, color: "#f3eee4", fontFamily: "Inter", padding: 54 }}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Mark size={22} color={C.goldLight} />
-        <Text style={{ fontFamily: "Display", fontWeight: 600, fontSize: 16, letterSpacing: -0.5, marginLeft: 9, color: "#f3eee4" }}>Aureum</Text>
+        <Mark size={24} dark bg={C.night} />
+        <Text style={{ fontFamily: "Wordmark", fontSize: 12.5, letterSpacing: 3.8, marginLeft: 11, color: "#f3eee4" }}>AUREUM</Text>
       </View>
       <View style={{ marginTop: 210 }}>
         <Text style={{ fontSize: 8, letterSpacing: 1.6, textTransform: "uppercase", color: C.goldLight, fontWeight: 600 }}>{meta.subtitle}</Text>
@@ -115,8 +124,8 @@ export function Sheet({ meta, children, landscape }: { meta: DocMeta; children: 
     <Page size="A4" orientation={landscape ? "landscape" : "portrait"} style={s.page}>
       <View style={s.header} fixed>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Mark size={13} />
-          <Text style={[s.brand, { marginLeft: 6 }]}>Aureum</Text>
+          <Mark size={14} />
+          <Text style={[s.brand, { marginLeft: 7 }]}>AUREUM</Text>
         </View>
         <Text style={{ fontSize: 7.5, color: C.muted }}>{meta.title} · {meta.subtitle}</Text>
       </View>

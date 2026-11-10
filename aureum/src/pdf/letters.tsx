@@ -31,8 +31,8 @@ function Letter({ sender, to, date, subject, children }: { sender: Sender; to: s
     <Page size="A4" style={s.page}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", height: 62 }}>
         <View>
-          <Text style={{ fontFamily: "Display", fontWeight: 600, fontSize: 13, letterSpacing: -0.3 }}>{sender.name || "Absender in den Einstellungen ergänzen"}</Text>
-          <Text style={{ fontSize: 8.4, color: C.muted }}>{[sender.street, sender.zipCity].filter(Boolean).join(", ")}</Text>
+          <Text style={{ fontFamily: "Display", fontWeight: 600, fontSize: 13, letterSpacing: -0.3, lineHeight: 1.25 }}>{sender.name || "Absender in den Einstellungen ergänzen"}</Text>
+          <Text style={{ fontSize: 8.4, color: C.muted, marginTop: 3, lineHeight: 1.3 }}>{[sender.street, sender.zipCity].filter(Boolean).join(", ")}</Text>
         </View>
         <Mark size={18} />
       </View>
