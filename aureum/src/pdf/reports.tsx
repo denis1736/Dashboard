@@ -121,12 +121,13 @@ export function PropertyReport({ pf, today, p }: { pf: Portfolio; today: string;
         <Section title="Von der Miete zum Cashflow (pro Jahr)">
           <Cascade steps={steps(m)} fmt={eur} />
         </Section>
-        <Section title="Wert, Restschuld und Eigenkapital seit Kauf">
-          <LineChart h={132} labels={hist.map((h) => String(h.year))} series={[{ label: "Eigenkapital", color: C.s1, values: hist.map((h) => h.equity) }, { label: "Marktwert", color: C.s2, values: hist.map((h) => h.value) }, { label: "Restschuld", color: C.s3, values: hist.map((h) => h.debt) }]} />
-        </Section>
+        <View style={{ marginTop: 10 }}><P muted>{NOTE} Steuer mit {pct(pf.settings.taxRatePct, 0)} Grenzsteuersatz.</P></View>
       </Sheet>
       <Sheet meta={mt}>
-        <H1 eyebrow="Vermietung und Finanzierung">Einheiten, Darlehen, Abschreibung</H1>
+        <H1 eyebrow="Entwicklung, Vermietung, Finanzierung">Wert, Einheiten, Darlehen</H1>
+        <Section title="Wert, Restschuld und Eigenkapital seit Kauf">
+          <LineChart h={124} labels={hist.map((h) => String(h.year))} series={[{ label: "Eigenkapital", color: C.s1, values: hist.map((h) => h.equity) }, { label: "Marktwert", color: C.s2, values: hist.map((h) => h.value) }, { label: "Restschuld", color: C.s3, values: hist.map((h) => h.debt) }]} />
+        </Section>
         <H2>Einheiten und Mieter</H2>
         <Table
           cols={[{ label: "Einheit", w: 20 }, { label: "Mieter", w: 20 }, { label: "Status", w: 13 }, { label: "Fläche", w: 9, right: true }, { label: "Kaltmiete", w: 11, right: true }, { label: "je m²", w: 9, right: true }, { label: "Marktmiete", w: 11, right: true }]}
@@ -138,14 +139,13 @@ export function PropertyReport({ pf, today, p }: { pf: Portfolio; today: string;
           ])}
           foot={["Summe", "", "", `${num(m.area)} m²`, eur(m.rentActual / 12), m.rentPerSqm ? eur2(m.rentPerSqm) : "–", eur(m.rentMarket / 12)]}
         />
-        {loans.length > 0 && <>
-          <H2>Darlehen</H2>
+        {loans.length > 0 && <Section title="Darlehen">
           <Table
             cols={[{ label: "Darlehen", w: 28 }, { label: "Restschuld", w: 14, right: true }, { label: "Zins", w: 8, right: true }, { label: "Rate / Monat", w: 13, right: true }, { label: "Zinsbindung bis", w: 14, right: true }, { label: "Restschuld dann", w: 15, right: true }]}
             rows={loans.map(({ l, st }) => [{ text: l.lender, bold: true, sub: `${l.label || LOAN_TYPE_LABEL[l.type]} · ${eur(l.principal)} ab ${dateDE(l.startDate)}` }, eur(st.balance), pct(st.ratePct, 2), eur2(st.payment), dateDE(l.fixedUntil), eur(st.balanceAtFixedEnd)])}
             foot={["Summe", eur(m.debt), pct(m.avgInterestPct, 2), eur2(m.monthlyPayment), "", ""]}
           />
-        </>}
+        </Section>}
         <Section title="Abschreibung">
         <KeyValue rows={[["AfA-Bemessungsgrundlage", eur(afaBasis(p))], ["Bodenwertanteil", pct(p.landSharePct)], ["Methode und Satz", `${p.afa.method === "degressiv" ? "degressiv" : p.afa.method === "linear" ? "linear" : "individuell"}, ${pct(p.afa.ratePct, 2)}`], [`AfA ${year}`, eur(afa?.amount ?? 0), true], [`Restwert Ende ${year}`, eur(afa?.residual ?? 0)]]} />
         </Section>
@@ -153,7 +153,6 @@ export function PropertyReport({ pf, today, p }: { pf: Portfolio; today: string;
           <H2>Hinweise</H2>
           {notes.map((n) => <Callout key={n.id} title={n.title} tone={n.level === "kritisch" ? "bad" : n.level === "chance" ? "good" : "gold"}>{n.detail}</Callout>)}
         </>}
-        <View style={{ marginTop: 8 }}><P muted>{NOTE}</P></View>
       </Sheet>
     </Doc>
   );
@@ -247,14 +246,14 @@ export function CashflowReport({ pf, today }: { pf: Portfolio; today: string }) 
   for (let i = 0; i < cols.length; i += 5) chunks.push(cols.slice(i, i + 5));
   return (
     <Doc meta={mt}>
-      <Cover meta={mt} facts={[{ label: "Kaltmiete p. a.", value: eurCompact(m.rentActual) }, { label: "Reinertrag p. a.", value: eurCompact(m.noi) }, { label: "Cashflow nach Steuern", value: eur(m.cfAfterTax) }, { label: "Nettomietrendite", value: pct(m.netYieldPct, 2) }]} />
+      <Cover meta={mt} facts={[{ label: "Kaltmiete p. a.", value: eurCompact(m.rentActual) }, { label: "Reinertrag p. a.", value: eurCompact(m.noi) }, { label: "Nach Steuern p. a.", value: eur(m.cfAfterTax) }, { label: "Nettomietrendite", value: pct(m.netYieldPct, 2) }]} />
       <Sheet meta={mt}>
         <H1 eyebrow="Gesamter Bestand">Von der Miete zum Cashflow</H1>
         <KpiGrid items={[
           { label: "Reinertrag p. a.", value: eur(m.noi) },
           { label: "Cashflow vor Tilgung", value: eur(m.cfBeforePrincipal), tone: tone(m.cfBeforePrincipal) },
           { label: "Cashflow vor Steuern", value: eur(m.cfPreTax), tone: tone(m.cfPreTax) },
-          { label: "Cashflow nach Steuern", value: eur(m.cfAfterTax), tone: tone(m.cfAfterTax) },
+          { label: "Cashflow n. Steuern", value: eur(m.cfAfterTax), tone: tone(m.cfAfterTax) },
         ]} />
         <View style={{ marginTop: 10 }}><Cascade steps={steps(m)} fmt={eur} /></View>
         <H2>Einordnung</H2>
@@ -273,7 +272,7 @@ export function CashflowReport({ pf, today }: { pf: Portfolio; today: string }) 
       {chunks.map((chunk, ci) => (
         <Sheet key={ci} meta={mt} landscape>
           <H1 eyebrow={chunks.length > 1 ? `Teil ${ci + 1} von ${chunks.length}` : "Objektvergleich"}>Kennzahlen je Objekt</H1>
-          <Table zebra
+          <Table zebra dense
             cols={[{ label: "Kennzahl", w: 26 }, ...chunk.map((c) => ({ label: c.p.name.length > 30 ? `${c.p.name.slice(0, 29)}…` : c.p.name, w: 15, right: true })), { label: "Gesamt", w: 15, right: true }]}
             rows={KP.map(([label, f]) => [label, ...chunk.map((c) => f(c.m)), { text: f(m), bold: true }])}
           />

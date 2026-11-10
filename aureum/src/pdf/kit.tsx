@@ -94,7 +94,7 @@ export function Cover({ meta, facts }: { meta: DocMeta; facts: { label: string; 
       </View>
       <View style={{ position: "absolute", left: 54, right: 54, bottom: 86, flexDirection: "row", borderTopWidth: 0.6, borderTopColor: "#3a352b", paddingTop: 16 }}>
         {facts.map((f) => (
-          <View key={f.label} style={{ flex: 1 }}>
+          <View key={f.label} style={{ flex: 1, paddingRight: 12 }}>
             <Text style={{ fontSize: 7, letterSpacing: 1.1, textTransform: "uppercase", color: "#958d7d", fontWeight: 600 }}>{f.label}</Text>
             <Text style={{ fontSize: 15, fontWeight: 600, marginTop: 4, color: "#f8f4ea" }}>{f.value}</Text>
           </View>
@@ -160,7 +160,7 @@ export function KpiGrid({ items, cols = 4 }: { items: { label: string; value: st
 export interface Col { label: string; w: number; right?: boolean }
 
 /** Tabelle mit Haarlinien; `w` sind Gewichte, die auf die Seitenbreite verteilt werden. */
-export function Table({ cols, rows, foot, zebra }: { cols: Col[]; rows: (string | { text: string; bold?: boolean; color?: string; sub?: string })[][]; foot?: string[]; zebra?: boolean }) {
+export function Table({ cols, rows, foot, zebra, dense }: { cols: Col[]; rows: (string | { text: string; bold?: boolean; color?: string; sub?: string })[][]; foot?: string[]; zebra?: boolean; dense?: boolean }) {
   const total = cols.reduce((a, c) => a + c.w, 0);
   const width = (c: Col) => `${(c.w / total) * 100}%`;
   return (
@@ -169,7 +169,7 @@ export function Table({ cols, rows, foot, zebra }: { cols: Col[]; rows: (string 
         {cols.map((c, n) => <Text key={`${c.label}${n}`} style={[s.th, { width: width(c), textAlign: c.right ? "right" : "left", paddingLeft: n === 0 ? 0 : 8 }]}>{c.label}</Text>)}
       </View>
       {rows.map((r, i) => (
-        <View key={i} wrap={false} style={{ flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: C.line, paddingVertical: 4.6, backgroundColor: zebra && i % 2 ? C.cream : undefined }}>
+        <View key={i} wrap={false} style={{ flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: C.line, paddingVertical: dense ? 3 : 4.6, backgroundColor: zebra && i % 2 ? C.cream : undefined }}>
           {r.map((cell, n) => {
             const c = cols[n];
             const v = typeof cell === "string" ? { text: cell } : cell;

@@ -79,7 +79,12 @@ export default function Berater() {
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({}));
         if (res.status === 503) fail({ kind: "setup" });
-        else if (res.status === 429) fail({ kind: "limit", until: Date.now() + (err.retryAfter ?? 60) * 1000, scope: err.scope ?? "minute" });
+        else if (res.status === 429) {
+          // Die Frage zurück ins Eingabefeld legen, damit sie nach der Pause nicht neu getippt werden muss.
+          set(messages);
+          setInput(q);
+          setNotice({ kind: "limit", until: Date.now() + (err.retryAfter ?? 60) * 1000, scope: err.scope ?? "minute" });
+        }
         else if (res.status === 413) fail({ kind: "error", text: "Die Unterhaltung ist zu lang geworden. Bitte beginnen Sie eine neue." });
         else fail({ kind: "error", text: err.error === "schluessel" ? "Der hinterlegte Groq-Schlüssel wurde abgelehnt." : "Der Berater ist gerade nicht erreichbar. Bitte in einem Moment erneut versuchen." });
         return;

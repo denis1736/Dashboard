@@ -30,3 +30,7 @@ monat;einnahmen;personal;material;software;marketing;sonstiges
 - Monat im Format `JJJJ-MM`, mindestens zwei Monate
 
 Alle Einstellungen, Buchungen, Ziele und importierten Daten werden nur lokal im Browser gespeichert (`localStorage`).
+
+## Weitere Projekte in diesem Repository
+
+- [`aureum/`](aureum/README.md): Aureum, eine eigenständige Anwendung für Vermieter (Next.js). Sie hat mit dem Glass Cockpit nichts zu tun und wird separat gebaut und gestartet.

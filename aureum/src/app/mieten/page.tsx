@@ -90,7 +90,7 @@ export default function Mieten() {
                           <div className="font-semibold">{eur2(r.due)}</div>
                           {r.status === "teilweise" && <div className="text-[12px] text-warn">{eur2(r.paid)} erhalten</div>}
                         </div>
-                        <div className="flex w-[76px] justify-end">
+                        <div className="flex w-[104px] justify-end">
                           {r.status === "bezahlt" || r.status === "teilweise"
                             ? <IconButton label="Buchung zurücknehmen" onClick={() => undo(r)}><Undo2 size={15} /></IconButton>
                             : null}
