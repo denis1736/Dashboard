@@ -1,0 +1,256 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/outfit";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Aureum – Private Banking. Warme, tiefe Flächen, Haarlinien statt Schatten,
+ * Gold ausschließlich als Akzent: aktive Navigation, Primäraktion, Leitkennzahl.
+ * Datenfarben (--s1..--s4) sind getrennt vom Akzent und auf Farbfehlsichtigkeit geprüft.
+ */
+:root {
+  color-scheme: light;
+  --bg: #f5f2ea;
+  --surface: #fffdf9;
+  --surface-2: #faf7f0;
+  --surface-3: #f0ebdf;
+  --line: rgba(52, 40, 14, 0.1);
+  --line-strong: rgba(52, 40, 14, 0.18);
+  --text: #1b1812;
+  --text-2: #514a3c;
+  --muted: #857c6a;
+  --accent: #8a6a1c;
+  --accent-strong: #6f5412;
+  --accent-ink: #fffaf0;
+  --accent-soft: rgba(138, 106, 28, 0.1);
+  --accent-line: rgba(138, 106, 28, 0.32);
+  --good: #1c7a4c;
+  --good-soft: rgba(28, 122, 76, 0.1);
+  --bad: #b23f35;
+  --bad-soft: rgba(178, 63, 53, 0.1);
+  --warn: #946200;
+  --warn-soft: rgba(148, 98, 0, 0.11);
+  --info: #3d63b8;
+  --info-soft: rgba(61, 99, 184, 0.1);
+  --s1: #a37c22;
+  --s2: #00907a;
+  --s3: #4a68cc;
+  --s4: #c4533a;
+  --s-muted: #b9b1a0;
+  --grid: rgba(52, 40, 14, 0.08);
+  --shadow: 0 1px 2px rgba(52, 40, 14, 0.04), 0 12px 32px -16px rgba(52, 40, 14, 0.14);
+  --shadow-pop: 0 24px 64px -20px rgba(40, 30, 10, 0.3), 0 0 0 1px var(--line);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0));
+  --mark-a: #b08a2e;
+  --mark-b: #7d5f16;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0a08;
+  --surface: #131210;
+  --surface-2: #191714;
+  --surface-3: #221f1a;
+  --line: rgba(255, 240, 210, 0.08);
+  --line-strong: rgba(255, 240, 210, 0.15);
+  --text: #f3eee4;
+  --text-2: #b8b0a1;
+  --muted: #8a8273;
+  --accent: #d6b36c;
+  --accent-strong: #ecd093;
+  --accent-ink: #1a1305;
+  --accent-soft: rgba(214, 179, 108, 0.11);
+  --accent-line: rgba(214, 179, 108, 0.34);
+  --good: #63c394;
+  --good-soft: rgba(99, 195, 148, 0.12);
+  --bad: #ec7d74;
+  --bad-soft: rgba(236, 125, 116, 0.13);
+  --warn: #e3ae52;
+  --warn-soft: rgba(227, 174, 82, 0.13);
+  --info: #86a9e6;
+  --info-soft: rgba(134, 169, 230, 0.13);
+  --s1: #b98a26;
+  --s2: #10a090;
+  --s3: #6c84e6;
+  --s4: #df6349;
+  --s-muted: #5d574c;
+  --grid: rgba(255, 240, 210, 0.07);
+  --shadow: 0 1px 0 rgba(255, 240, 210, 0.03) inset, 0 20px 40px -24px rgba(0, 0, 0, 0.7);
+  --shadow-pop: 0 32px 80px -20px rgba(0, 0, 0, 0.85), 0 0 0 1px var(--line-strong);
+  --sheen: linear-gradient(180deg, rgba(255, 240, 210, 0.035), rgba(255, 240, 210, 0));
+  --mark-a: #f0d79d;
+  --mark-b: #c2913a;
+}
+
+/* Akzentvarianten: jeweils ein Ton für helle und einer für dunkle Flächen. */
+[data-accent="champagner"] { --accent: #7d6a3f; --accent-strong: #64532c; --accent-soft: rgba(125, 106, 63, 0.1); --accent-line: rgba(125, 106, 63, 0.32); }
+[data-theme="dark"][data-accent="champagner"] { --accent: #e3d2ac; --accent-strong: #f3e7cb; --accent-soft: rgba(227, 210, 172, 0.1); --accent-line: rgba(227, 210, 172, 0.32); }
+[data-accent="bronze"] { --accent: #96552a; --accent-strong: #7a421d; --accent-soft: rgba(150, 85, 42, 0.1); --accent-line: rgba(150, 85, 42, 0.32); }
+[data-theme="dark"][data-accent="bronze"] { --accent: #d99a6c; --accent-strong: #ecb890; --accent-soft: rgba(217, 154, 108, 0.11); --accent-line: rgba(217, 154, 108, 0.34); }
+[data-accent="smaragd"] { --accent: #1d6f52; --accent-strong: #135540; --accent-soft: rgba(29, 111, 82, 0.1); --accent-line: rgba(29, 111, 82, 0.32); }
+[data-theme="dark"][data-accent="smaragd"] { --accent: #6fcaa2; --accent-strong: #98dfbf; --accent-soft: rgba(111, 202, 162, 0.11); --accent-line: rgba(111, 202, 162, 0.34); --accent-ink: #04180f; }
+[data-accent="saphir"] { --accent: #2f55a8; --accent-strong: #234389; --accent-soft: rgba(47, 85, 168, 0.1); --accent-line: rgba(47, 85, 168, 0.32); }
+[data-theme="dark"][data-accent="saphir"] { --accent: #8fb0ee; --accent-strong: #b3c9f5; --accent-soft: rgba(143, 176, 238, 0.11); --accent-line: rgba(143, 176, 238, 0.34); --accent-ink: #06122b; }
+
+/* Mit einer anderen Akzentfarbe folgt die Bildmarke dem Akzent. */
+[data-accent]:not([data-accent="gold"]) {
+  --mark-a: color-mix(in oklab, var(--accent) 78%, #fff);
+  --mark-b: color-mix(in oklab, var(--accent) 84%, #000);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Manrope Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --radius-card: 16px;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "calt";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    min-height: 100dvh;
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: -0.006em;
+  }
+  ::selection { background: var(--accent-soft); color: var(--text); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  input, select, textarea, button { font: inherit; color: inherit; letter-spacing: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  table { border-collapse: collapse; width: 100%; }
+  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+}
+
+@layer components {
+  .card {
+    background: var(--sheen), var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow);
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 550;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .display { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.035em; line-height: 1.1; }
+  .wordmark {
+    font-family: "Outfit Variable", var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.3em;
+    margin-right: -0.3em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .rule-gold { height: 1px; background: linear-gradient(90deg, var(--accent), transparent); opacity: 0.55; }
+
+  .field {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-2);
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  textarea.field { height: auto; padding: 10px 12px; resize: vertical; }
+  .field:hover { border-color: var(--muted); }
+  .field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
+  .field::placeholder { color: var(--muted); }
+
+  .tbl th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 550;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .tbl td { padding: var(--row-pad, 12px) 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .tbl tr:last-child td { border-bottom: 0; }
+  .tbl tbody tr { transition: background 0.12s; }
+  .tbl tbody tr:hover { background: var(--surface-2); }
+  .tbl .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tbl tfoot td { border-top: 1px solid var(--line-strong); border-bottom: 0; font-weight: 600; }
+}
+
+[data-density="kompakt"] { --row-pad: 7px; }
+[data-density="kompakt"] body { font-size: 13px; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop { from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes sheet { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes growx { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+.rise { animation: rise 0.5s var(--ease-out-expo) both; }
+.rise-1 { animation-delay: 0.04s; } .rise-2 { animation-delay: 0.08s; } .rise-3 { animation-delay: 0.12s; }
+.rise-4 { animation-delay: 0.16s; } .rise-5 { animation-delay: 0.2s; }
+.skeleton {
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; }
+}
+
+@media print {
+  body { background: #fff; }
+}
+
+/* Schieberegler */
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; background: transparent; cursor: pointer; }
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: linear-gradient(90deg, var(--accent) var(--fill, 50%), var(--line-strong) var(--fill, 50%)); }
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 999px; background: var(--line-strong); }
+input[type="range"]::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--accent); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); transition: transform 0.12s; }
+input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
